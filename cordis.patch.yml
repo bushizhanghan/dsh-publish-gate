@@ -1,0 +1,4 @@
+# dsh bundle layer: mount the publish-gate plugin (lib/index.js).
+- insert:
+    - id: publish-gate
+      name: '@bushizhanghan/dsh-publish-gate'
