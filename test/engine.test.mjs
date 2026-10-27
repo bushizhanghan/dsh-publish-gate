@@ -249,13 +249,24 @@ test('renderReport counts blockers and lists fixes', () => {
   assert.match(renderReport([]), /no blockers/)
 })
 
-// ---- the real test: my own four published plugins ----
+// ---- the real test: the sibling plugin checkouts in this workspace ----
+// Resolved from this file's own location, so moving the whole workspace is
+// harmless. `new URL().pathname` is not used: it percent-encodes the Chinese
+// directory name and every fixture read then fails with ENOENT.
+import { fileURLToPath } from 'node:url'
+const HERE = fileURLToPath(new URL('.', import.meta.url)).replace(/\\/g, '/')
+const WORKSPACE = HERE.replace(/\/dsh-publish-gate\/test\/?$/, '')
 const MY_PLUGINS = [
-  'E:/dsh-page-monitor',
-  'E:/dsh-weapp-loop',
-  'E:/dsh-profile-doctor',
-  'E:/dsh-openfoam-doctor',
-]
+  'dsh-page-monitor',
+  'dsh-weapp-loop',
+  'dsh-profile-doctor',
+  'dsh-openfoam-doctor',
+  'dsh-publish-gate',
+  'dsh-compaction-audit',
+  'dsh-context-budget',
+  'dsh-routing-forensics',
+  'dsh-workspace-switch-cost',
+].map((n) => `${WORKSPACE}/${n}`)
 
 test('the four published plugins pass the static gate (no blockers)', () => {
   for (const dir of MY_PLUGINS) {

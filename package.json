@@ -1,7 +1,7 @@
 {
   "name": "@bushizhanghan/dsh-publish-gate",
-  "version": "0.1.1",
-  "description": "Pre-publish gate for DSH plugins: every silent failure in the publish path turned into a deterministic check — package.json completeness, BOM, YAML/JSON parseability, junction and patch insert correctness, npm scope permissions, GitHub repo and token state, market entry format, LICENSE/README, test suite. 发布门禁：把插件发布链路上的每个静默坑变成确定性检查。",
+  "version": "0.1.2",
+  "description": "Helps DSH plugin AUTHORS publish their plugins: a one-command gate that turns every silent failure in the publish path into a deterministic check — package.json completeness, BOM, YAML/JSON parseability, junction and patch insert correctness, npm scope permissions, GitHub repo and token state, market entry format, LICENSE/README, test suite. 帮助插件作者一键发布：写完插件后跑一遍门禁，把发布链路上的每个静默坑变成确定性检查，然后 GitHub + npm + 市场一键三连。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

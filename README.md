@@ -1,8 +1,19 @@
-# dsh-publish-gate — 插件发布门禁（DSH 插件）
+# dsh-publish-gate — 帮你发布 DSH 插件的一键三连门禁
 
+> **这个插件是给插件作者用的**：你写完一个 DSH 插件，想发 GitHub + npm + 插件市场，它帮你把发布前该查的全部查一遍，再给你照抄的命令清单。
+>
 > 发布一个 DSH 插件有七步，每一步都有一个**直到你付出代价才说话的坑**：`files` 忘了 `lib/` 于是发出去一个空包、PowerShell 写下的 BOM 让 `JSON.parse` 报一个不提 BOM 的错、patch 的 insert 行缩进错了于是插件装上了但**永远不加载**、裸包名让 granular token 收到一个既不说 token 也不说 scope 的 403。这个插件把整条链路的每个静默坑变成一条确定性检查。
 
 六个 agent 工具：全量门禁、patch 专项、市场条目校验、版本推进、多插件体检、发布命令清单。
+
+## 典型用法（写完插件后）
+
+```
+我写好了一个新插件 X，帮我发出去
+→ agent 先调 publish_gate(X) 查所有静默坑
+→ 有 blocker 就修，修完再跑
+→ 全绿后调 publish_gate_commands(X, {version}) 拿 GitHub/npm/市场三步的命令，照抄执行
+```
 
 ## 安装
 
