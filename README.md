@@ -88,7 +88,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test test/    # 18 个单测（含 4 个真实插件作 fixture）+ 16 项集成测试
+node --test    # 19 个单测（含 4 个真实插件作 fixture）+ 16 项集成测试
 ```
 
 ## License

@@ -36,7 +36,7 @@ function goodPlugin(dir, overrides = {}) {
         exports: { '.': './lib/index.js' },
         files: ['lib', 'cordis.patch.yml', 'README.md', 'LICENSE'],
         dsh: { bundle: { patch: './cordis.patch.yml' } },
-        scripts: { test: 'node --test test/' },
+        scripts: { test: 'node --test' },
         ...overrides,
       },
       null,
@@ -215,6 +215,21 @@ test('missing tests are reported', () => {
     goodPlugin(dir)
     rmSync(join(dir, 'test'), { recursive: true, force: true })
     assert.ok(checkTests(dir).some((f) => f.rule === 'no-tests'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a test script that passes a path to node --test is flagged', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-testscript-'))
+  try {
+    // the shape that ships and silently fails on Node 22+
+    goodPlugin(dir, { scripts: { test: 'node --test test/' } })
+    const rules = checkTests(dir).map((f) => f.rule)
+    assert.ok(rules.includes('test-script-dir-arg'), `expected the rule, got ${JSON.stringify(rules)}`)
+    // auto-discovery is the correct shape and must stay quiet
+    goodPlugin(dir, { scripts: { test: 'node --test' } })
+    assert.ok(!checkTests(dir).some((f) => f.rule === 'test-script-dir-arg'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
