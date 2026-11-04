@@ -12,6 +12,8 @@ import {
   checkPatchYml,
   checkTests,
   checkVersionTaken,
+  compareVersions,
+  latestPublished,
   renderReport,
   runStaticChecks,
 } from '../lib/engine.js'
@@ -384,4 +386,28 @@ test('any *.test.mjs or *.spec.mjs counts as a test file', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   }
+})
+
+test('compareVersions orders the numeric part', () => {
+  assert.equal(compareVersions('0.1.4', '0.1.3'), 1)
+  assert.equal(compareVersions('0.1.3', '0.1.4'), -1)
+  assert.equal(compareVersions('0.1.4', '0.1.4'), 0)
+  assert.equal(compareVersions('1.0.0', '0.9.9'), 1)
+})
+
+test('latestPublished reads dist-tags and stays null when it cannot', async () => {
+  const http = await import('node:http')
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ 'dist-tags': { latest: '0.1.9' }, versions: {} }))
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  try {
+    const { port } = server.address()
+    assert.equal(await latestPublished('@bushizhanghan/dsh-page-monitor', { registry: `http://127.0.0.1:${port}` }), '0.1.9')
+  } finally {
+    server.close()
+  }
+  // a registry that cannot be reached must not invent a version
+  assert.equal(await latestPublished('@bushizhanghan/dsh-page-monitor', { registry: 'http://127.0.0.1:1', timeoutMs: 1500 }), null)
 })

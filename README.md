@@ -29,7 +29,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate` | 全量门禁：静态检查 + 网络检查，返回 `safeToPublish` |
 | `publish_gate_patch` | 只查 `cordis.patch.yml`——「插件装了但工具没出现」的第一个怀疑对象 |
 | `publish_gate_market` | 校验市场条目 YAML（url/name/category/description 双语） |
-| `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少 |
+| `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
 | `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，看哪个插件还不能发 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步 |
 
@@ -90,7 +90,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test    # 24 个测试（含 4 个真实插件作 fixture）
+node --test    # 26 个测试（含 4 个真实插件作 fixture）
 ```
 
 ## License
