@@ -110,8 +110,7 @@ test('missing exports["."] is an error', () => {
   }
 })
 
-test('an insert row at the wrong indent is the silent-never-mounted bug', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'gate-indent-'))
+test('a top-level "- id:" pair is caught as a patch that never mounts', () => {  const dir = mkdtempSync(join(tmpdir(), 'gate-indent-'))
   try {
     goodPlugin(dir)
     // exactly what I wrote for page-monitor and weapp-loop: a top-level
@@ -121,11 +120,14 @@ test('an insert row at the wrong indent is the silent-never-mounted bug', () => 
       '# comment\n- id: page-monitor\n  name: "@bushizhanghan/dsh-page-monitor"\n',
     )
     const findings = checkPatchYml(dir)
-    const bad = findings.find((f) => f.rule === 'insert-wrong-indent')
-    assert.ok(bad, 'wrong-indent insert must be reported')
+    const bad = findings.find((f) => f.rule === 'no-insert-row')
+    assert.ok(bad, 'a patch with only override rows must be reported')
     assert.equal(bad.severity, 'error')
-    assert.match(bad.detail, /patch on an existing entry, not a mount/)
-    assert.match(bad.detail, /without your plugin/)
+    // the detail must say WHY it is not a mount, or the reader just indents it
+    assert.match(bad.detail, /patch entries that already exist in the tree/)
+    // and the old false positive must be gone: a patch row is legal, not a
+    // mis-indented insert whose "fix" would duplicate an existing id
+    assert.ok(!findings.some((f) => f.rule === 'insert-wrong-indent'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -298,7 +300,7 @@ test('the four published plugins pass the static gate (no blockers)', () => {
 test('the four published plugins have no patch or entry-structure findings', () => {
   for (const dir of MY_PLUGINS) {
     const rules = runStaticChecks(dir).map((f) => f.rule)
-    for (const forbidden of ['insert-wrong-indent', 'insert-missing-name', 'insert-name-mismatch', 'no-insert-row', 'no-name-export', 'no-apply-export', 'require-in-esm', 'utf8-bom']) {
+    for (const forbidden of ['insert-wrong-indent', 'insert-missing-name', 'insert-name-mismatch', 'no-insert-row', 'patch-not-mount', 'no-name-export', 'no-apply-export', 'require-in-esm', 'utf8-bom']) {
       assert.ok(!rules.includes(forbidden), `${dir}: ${forbidden}`)
     }
   }
@@ -315,4 +317,71 @@ test('checkVersionTaken reports a version that is already live', async () => {
   // a version that will never exist is not reported
   const none = await checkVersionTaken('@bushizhanghan/dsh-page-monitor', '99.99.99')
   assert.deepEqual(none, [])
+})
+
+test('checkVersionTaken says so when the registry did not answer', async () => {
+  // port 1 refuses instantly: this must not read as "the version is free"
+  const findings = await checkVersionTaken('@bushizhanghan/dsh-page-monitor', '0.1.0', { registry: 'http://127.0.0.1:1', timeoutMs: 1500 })
+  assert.deepEqual(findings, [], 'a refused connection is silent, not a false finding')
+  // a reachable registry answering 500 must warn rather than pass
+  const http = await import('node:http')
+  const server = http.createServer((_req, res) => {
+    res.writeHead(500)
+    res.end('nope')
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  try {
+    const { port } = server.address()
+    const got = await checkVersionTaken('@bushizhanghan/dsh-page-monitor', '0.1.0', { registry: `http://127.0.0.1:${port}` })
+    const warn = got.find((f) => f.rule === 'registry-unreachable')
+    assert.ok(warn, 'a 500 must not pass as a clean version check')
+    assert.equal(warn.severity, 'warn')
+  } finally {
+    server.close()
+  }
+})
+
+test('files entries that pack lib/ are all accepted', () => {
+  for (const variant of [['lib'], ['lib/'], ['./lib'], ['lib/**/*.js'], ['lib/index.js', 'lib/engine.js']]) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-files-'))
+    try {
+      goodPlugin(dir, { files: [...variant, 'cordis.patch.yml'] })
+      const rules = checkPackageJson(dir).map((f) => f.rule)
+      assert.ok(!rules.includes('files-omits-lib'), `${JSON.stringify(variant)} must count as packing lib/`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('an exports-only package does not need main', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-nomain-'))
+  try {
+    goodPlugin(dir)
+    const parsed = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    delete parsed.main
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(parsed, null, 2))
+    const findings = checkPackageJson(dir)
+    assert.ok(
+      !findings.some((f) => f.rule === 'missing-field' && /"main"/.test(f.title)),
+      `exports["."] resolves the entry; main is optional. got ${JSON.stringify(findings.map((f) => f.title))}`,
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('any *.test.mjs or *.spec.mjs counts as a test file', () => {
+  for (const name of ['plugin.test.mjs', 'rules.spec.mjs']) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-tests-'))
+    try {
+      goodPlugin(dir)
+      rmSync(join(dir, 'test', 'engine.test.mjs'))
+      writeFileSync(join(dir, 'test', name), 'import { test } from "node:test"\ntest("x", () => {})\n')
+      const rules = checkTests(dir).map((f) => f.rule)
+      assert.ok(!rules.includes('no-test-files'), `${name} is a test file`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
 })

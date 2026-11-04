@@ -37,7 +37,7 @@ try {
     const bad = await call('publish_gate', { dir: broken, skipNetwork: true })
     const rules = bad.findings.map((f) => f.rule)
     results.push(['publish_gate catches BOM', rules.includes('utf8-bom')])
-    results.push(['publish_gate catches wrong-indent insert', rules.includes('insert-wrong-indent')])
+    results.push(['publish_gate catches a patch that never mounts', rules.includes('no-insert-row')])
     results.push(['publish_gate catches require in ESM', rules.includes('require-in-esm')])
     results.push(['publish_gate reports unsafe', bad.safeToPublish === false && bad.blockers > 0])
   } finally {

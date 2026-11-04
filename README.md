@@ -47,14 +47,15 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `no-exports` | 缺 `exports["."]`，宿主解析不到入口 |
 | `client-without-export` | 声明了 client 平台却没导出 `./client`，宿主半边在、侧栏永不出现 |
 | `not-esm` | 没 `"type": "module"`，`import` 在加载时炸 |
-| `insert-wrong-indent` | **insert 行没在 `- insert:` 底下**——顶层 `- id:` 是对已有条目的 patch，不是挂载 |
+| `no-insert-row` | patch 里只有 override，永远不挂载（页面报的仍然是这条——顶层 `- id:` 是 patch 不是挂载） |
+| `patch-not-mount` | info：这些顶层 `- id:` 是在覆盖已有条目，合法，但**不是**挂载 |
 | `insert-missing-name` / `insert-name-mismatch` | 挂载名缺失或与 package.json 不一致 |
-| `no-insert-row` | patch 里只有 override，永远不挂载 |
 | `no-patch-file` | 有 `lib/index.js` 但没有 `cordis.patch.yml` |
 | `no-name-export` / `no-apply-export` | 入口协议不完整 |
 | `require-in-esm` | ESM 里 `require()` → `ERR_AMBIGUOUS_MODULE_SYNTAX`，报错不带行号 |
 | `no-license` | 缺 LICENSE |
 | `version-taken` | 这个版本已经在 registry 上，再发是 403 |
+| `registry-unreachable` | registry 回了 500/429 —— 版本检查**没跑**，所以别把它当干净 |
 
 ### 值得在发布前知道的（warn / info）
 `unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`，以及市场条目的 `market-*` 全系列。
@@ -69,9 +70,10 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
     fail with a parse error that never names the BOM.
 ✗ files does not include "lib"  [files-omits-lib]
     The published tarball will contain no code.
-✗ insert row "page-monitor" (line 173) is not inside an "- insert:" sequence  [insert-wrong-indent]
-    A top-level `- id:` row is a patch on an existing entry, not a mount. The
-    loader reports one stderr warning and boots without your plugin.
+✗ cordis.patch.yml has no insert row  [no-insert-row]
+    A patch with only overrides never mounts your plugin. This file has 1
+    top-level `- id:` row — those patch entries that already exist in the tree,
+    they do not add one.
 ✗ lib/index.js calls require() inside an ESM module  [require-in-esm]
 4 blocker(s) — fix before publishing
 ```
@@ -88,7 +90,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test    # 19 个单测（含 4 个真实插件作 fixture）+ 16 项集成测试
+node --test    # 24 个测试（含 4 个真实插件作 fixture）
 ```
 
 ## License
