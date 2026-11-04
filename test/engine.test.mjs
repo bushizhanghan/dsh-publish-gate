@@ -172,6 +172,24 @@ test('require() inside an ESM entry is an error', () => {
   }
 })
 
+test('require() is caught in every call form, not just `const x =`', () => {
+  for (const line of [
+    `const { readFileSync } = require('node:fs')`,
+    `let fs\nfs = require('node:fs')`,
+    `const text = require('node:fs').readFileSync('x', 'utf8')`,
+  ]) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-require2-'))
+    try {
+      goodPlugin(dir)
+      writeFileSync(join(dir, 'lib', 'index.js'), `${line}\nexport const name = 'good'\nexport function apply() {}\n`)
+      const rules = checkEntrySource(dir).map((f) => f.rule)
+      assert.ok(rules.includes('require-in-esm'), line)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
 test('missing name/apply exports are errors', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-exports2-'))
   try {

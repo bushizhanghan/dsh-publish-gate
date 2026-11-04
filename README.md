@@ -90,7 +90,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test    # 26 个测试（含 4 个真实插件作 fixture）
+node --test    # 27 个测试（含 4 个真实插件作 fixture）
 ```
 
 ## License
