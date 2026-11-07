@@ -10,6 +10,7 @@ import {
   checkClientHalf,
   checkClientRuntime,
   checkDependencies,
+  entryFile,
   checkDocs,
   checkEntrySource,
   checkInjectCoverage,
@@ -2165,4 +2166,78 @@ test('a published version that is not what latest points at is called out', asyn
   // not published yet: neither rule fires
   const fresh = await checkVersionTaken('x', '3.0.0', { doc: doc('2.0.0') })
   assert.deepEqual(fresh.map((f) => f.rule), [])
+})
+
+
+test('console.log is reported once per file, not once per call', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-log-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'noisy.js'),
+      'export const a = () => { console.log(1); console.log(2); console.log(3) }\n',
+    )
+    const findings = checkLibHygiene(dir).filter((f) => f.rule === 'lib-console-log')
+    assert.equal(findings.length, 1)
+    assert.match(findings[0].title, /3 time\(s\)/)
+    assert.match(findings[0].title, /line 1/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('console.log in the client bundle is not host-log residue', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-logc-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' }, dsh: { client: { platform: 'web' }, bundle: { patch: './cordis.patch.yml' } } })
+    writeFileSync(join(dir, 'lib', 'client.js'), 'console.log("panel mounted")\n')
+    assert.deepEqual(checkLibHygiene(dir).filter((f) => f.rule === 'lib-console-log'), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('entryFile follows exports["."] instead of assuming lib/index.js', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-entry-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(join(dir, 'index.mjs'), 'export const name = "x"\n')
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: '@me/x', version: '1.0.0', type: 'module', exports: { '.': './index.mjs' } }, null, 2),
+    )
+    assert.equal(entryFile(dir), join(dir, 'index.mjs'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('entryFile returns null when the manifest names no file that exists', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-entry2-'))
+  try {
+    goodPlugin(dir)
+    rmSync(join(dir, 'lib'), { recursive: true, force: true })
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: '@me/x', version: '1.0.0', type: 'module', main: './gone.js' }, null, 2),
+    )
+    assert.equal(entryFile(dir), null)
+    const { findings } = await checkToolRegistrations(dir)
+    assert.deepEqual(findings.map((f) => f.rule), ['entry-missing'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a missing @deepseek-ai peer is a warn, not a load failure', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-peer-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(join(dir, 'lib', 'index.js'), 'import "@deepseek-ai/dsh-settings"\nexport const name = "x"\nexport function apply() {}\n')
+    const { findings } = await checkToolRegistrations(dir)
+    assert.deepEqual(findings.map((f) => f.rule), ['entry-import-unresolved'])
+    assert.equal(findings[0].severity, 'warn')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

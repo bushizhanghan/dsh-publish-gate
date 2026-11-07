@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.0
+
+- The runtime layer no longer assumes the entry is `lib/index.js`. It resolves `exports["."]` →
+  `main` → `lib/index.js`. Measured against the thirty-one plugins installed in this profile, the
+  old guess produced **twenty false "entry throws when imported" errors**; two of those plugins ship
+  `index.mjs` with no `lib/` at all.
+- `entry-missing` (error): the manifest names no file that exists, so there is nothing to import.
+- `entry-import-unresolved` (warn): the entry imports a bare package that is not installed beside
+  it and is a host-provided peer (`@deepseek-ai/*` or a declared `peerDependencies` entry). That is
+  not a defect — but a bare import of something the host does *not* provide fails identically.
+- `lib-console-log` reports **once per file with a count**, and never for the client bundle. One
+  bundled plugin carried 459 `console.log` calls and produced 459 warnings, which is how a gate gets
+  ignored; in a browser bundle `console.log` is the debug channel, not host-log residue.
+- `unused-dependency` is skipped for packages that ship a client bundle: the bundler inlines those
+  dependencies, so the code is in the bundle and "lib/ never imports it" is true but not actionable.
+
 ## 0.20.0
 
 - `publish_gate_commands` now agrees with the rules: a prerelease version gets `npm publish --tag next`

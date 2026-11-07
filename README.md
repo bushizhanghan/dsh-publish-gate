@@ -66,6 +66,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `no-insert-row` | patch 里只有 override，永远不挂载（页面报的仍然是这条——顶层 `- id:` 是 patch 不是挂载） |
 | `bundle-patch-not-declared` | 有 `cordis.patch.yml` 但清单里没有 `dsh.bundle.patch`——patch 是死的，装了不挂载 |
 | `entry-path-missing` | `main` / `exports["."]` / `exports["./client"]` 指的文件不存在，宿主解析到空 |
+| `entry-missing` | 清单里没有任何一个存在的入口文件——连 `import` 的机会都没有 |
 | `inject-missing-*` | 用了 `ctx.tools` / `ctx.web` / `ctx.webServer` / `ctx.setInterval` 却没在 `inject` 里声明，cordis 永远不激活 |
 | `patch-not-mount` | info：这些顶层 `- id:` 是在覆盖已有条目，合法，但**不是**挂载 |
 | `insert-missing-name` / `insert-name-mismatch` | 挂载名缺失或与 package.json 不一致 |
@@ -105,9 +106,12 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 前两层都是读文件，读不出「装上能不能用」。这一层在独立子进程里 `import()` 入口、用假 ctx 调一次 `apply(ctx)`，把 `ctx.tools.register` 收到的每一条拿回来检查。20 秒超时，你的插件代码不在宿主进程里跑。
 
+入口按 `exports["."]` → `main` → `lib/index.js` 的顺序解析。**早先写死 `lib/index.js`，拿三十一个真实已装插件一测，二十个报"入口抛异常"——其中两个的入口是 `index.mjs`，根本没有 `lib/`。**误报比漏报更贵：一个满屏假错误的门禁，第二次就没人跑了。
+
 | 规则 | 抓什么 |
 |---|---|
 | `entry-import-failed` | `import()` 入口就抛——装上必定不加载 |
+| `entry-import-unresolved` | 入口 import 了一个没装在旁边的包（`@deepseek-ai/*` 这类宿主提供的 peer）——**warn**，不是缺陷 |
 | `apply-threw` | `apply(ctx)` 抛 |
 | `tool-none-registered` | 入口能加载，但一个工具都没注册 |
 | `tool-missing-execute` / `tool-missing-output-schema` | 注册项缺 `execute` / `output.schema`（宿主用 schema 校验返回值，缺了等于没校验） |
@@ -159,7 +163,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 ### 代码卫生
 
-`lib-debugger`（error）、`lib-console-log`、`lib-hardcoded-path`（`C:\Users\...` 硬编码）、`lib-url-pathname`（`new URL(...).pathname` 在中文路径上会百分号编码，得用 `fileURLToPath`）、`node-too-old`（`engines.node` 写着 `>=18`，`lib/` 里却用了 `Object.groupBy`（21）或 `Promise.withResolvers`（22）。npm 对 `engines` 只是警告，照样装上，然后在 import 那一刻抛——用户看到的是「插件坏了」，不是版本不匹配）。字符串和注释里的同名文字不算。
+`lib-debugger`（error）、`lib-console-log`（**每个文件一条，带次数**；浏览器半边豁免——那里 `console.log` 是调试通道，不是宿主日志残渣）、`lib-hardcoded-path`（`C:\Users\...` 硬编码）、`lib-url-pathname`（`new URL(...).pathname` 在中文路径上会百分号编码，得用 `fileURLToPath`）、`node-too-old`（`engines.node` 写着 `>=18`，`lib/` 里却用了 `Object.groupBy`（21）或 `Promise.withResolvers`（22）。npm 对 `engines` 只是警告，照样装上，然后在 import 那一刻抛——用户看到的是「插件坏了」，不是版本不匹配）。字符串和注释里的同名文字不算。
 
 ### 依赖真实性：`lib/` 里 import 的东西，消费者那边真的会装上吗
 
@@ -169,7 +173,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 |---|---|
 | `undeclared-import` | `lib/` 里 import 了某个包，`package.json` 三个依赖字段里都没有。它在你机器上能解析，只是因为别的包把它提升（hoist）到了 `node_modules` |
 | `dep-in-dev-only` | 只在 `devDependencies` 里声明。这是最常见的一种：写代码时 `npm i -D` 装上了，测试也全绿 |
-| `unused-dependency` | `dependencies` 里声明了，`lib/` 里从没 import。每个装你的人都白下一份（info，因为有些包是运行时动态加载的） |
+| `unused-dependency` | `dependencies` 里声明了，`lib/` 里从没 import。每个装你的人都白下一份（info，因为有些包是运行时动态加载的）。带浏览器半边的包**不查这条**：打包器已经把依赖内联进 bundle，代码就在里面，不是没用到 |
 
 内置模块（`node:fs`、`fs/promises`）、相对路径、以及浏览器半边从宿主 `require` 拿到的 `react` 都不算。工具描述里那句 `require("react")` 是散文，也不是依赖——这条规则最早就是被它自己误报出来的。
 
@@ -235,7 +239,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 120 个引擎单测
+node --test                      # 125 个引擎单测
 node test/integration.test.mjs   # 28 条集成断言（9 个真实插件作 fixture）
 ```
 
