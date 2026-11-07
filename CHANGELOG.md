@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1
+
+- Fixed: a non-string `dir` made every path tool throw a raw Node `TypeError`
+  (`The "path" argument must be of type string. Received type number (123)`).
+  The host never validates tool input against `parameters`, so a number or an
+  object really does reach `path.join`. A wrong type is now refused with a
+  message, and it deliberately does NOT fall back to the cwd — that would gate a
+  different plugin than the one that was asked for.
+- Integration test added: every tool that takes `dir` is driven with `123`,
+  `true`, `{}` and `[]` and must answer with `ok: false`, never throw.
+
 ## 0.7.0
 
 - `tool-output-invalid` (error): a tool result its own `output.schema` rejects. The host validates every

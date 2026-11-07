@@ -215,7 +215,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 ```sh
 node --test                      # 88 个引擎单测
-node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
+node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 
 ## License

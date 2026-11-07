@@ -108,6 +108,27 @@ try {
   const verify = await call('publish_gate_verify', { dir: HERE.replace(/\/test\/?$/, ''), version: '0.1.6' })
   results.push(['verify reports the local tarball shasum', verify.ok === true && /^[0-9a-f]{40}$/.test(verify.localShasum || '')])
   results.push(['verify catches a spent version holding different bytes', verify.findings.some((f) => f.rule === 'publish-served-mismatch')])
+
+  // 10. The host never validates tool input against `parameters`, so a number can
+  // reach a path argument. Every tool must answer with a result, never a throw.
+  const pathTools = [...registry.values()].filter((t) => t.parameters?.properties?.dir)
+  let bad = null
+  for (const tool of pathTools) {
+    // null means "not given" and legitimately falls back to cwd, so it is not
+    // in this list: only types that could never be a path.
+    for (const value of [123, true, { a: 1 }, [1]]) {
+      try {
+        const r = await tool.execute({ dir: value }, { signal: undefined })
+        if (!r || typeof r !== 'object' || r.ok !== false) bad = `${tool.name} accepted dir=${JSON.stringify(value)}`
+      } catch (error) {
+        bad = `${tool.name} threw on dir=${JSON.stringify(value)}: ${error && error.message}`
+      }
+      if (bad) break
+    }
+    if (bad) break
+  }
+  if (bad) console.error('  ->', bad)
+  results.push(['a wrong-typed dir is refused, never thrown', bad === null && pathTools.length > 0])
 } catch (error) {
   console.error('UNEXPECTED THROW:', error)
   results.push(['no-throw', false])
