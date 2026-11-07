@@ -37,7 +37,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_market` | 校验市场条目 YAML（url/name/category/description 双语）；传 `dir` 则改查只有线上才能回答的三件事：这个仓库**已经在目录里**（再开 PR 就是重复条目）、另一个条目也在发同一个 npm 包、仓库还**不满 24 小时**（提交门禁会失败并自己重跑） |
 | `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
 | `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，附带每个插件的真实包体积，看哪个还不能发 |
-| `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步 |
+| `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify` |
 
 ## 检查清单
 
@@ -184,7 +184,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 ```sh
 node --test                      # 64 个引擎单测
-node test/integration.test.mjs   # 24 条集成断言（9 个真实插件作 fixture）
+node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 
 ## License

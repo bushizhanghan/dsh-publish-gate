@@ -84,8 +84,13 @@ try {
 
   // 7. commands
   const cmds = await call('publish_gate_commands', { dir: sibling('dsh-page-monitor'), owner: 'bushizhanghan' })
-  results.push(['commands lists the pipeline', cmds.ok === true && cmds.steps.length === 6 && cmds.steps[0].done === true])
+  results.push(['commands lists the pipeline', cmds.ok === true && cmds.steps.length === 7 && cmds.steps[0].done === true])
   results.push(['commands flags unscoped names', /UNSCOPED/.test(JSON.stringify(cmds.steps)) === false])
+  // The publish step must be runnable on this machine and followed by the
+  // shasum check, or the author has no way to know the registry holds the bytes.
+  const publishStep = cmds.steps.find((s) => s.name === 'npm publish')
+  results.push(['commands publish step is platform-runnable', /npm publish --access public/.test(publishStep.command) && (process.platform !== 'win32' || publishStep.command.startsWith('cmd /c'))])
+  results.push(['commands pairs publish with the shasum check', cmds.steps.findIndex((s) => /publish_gate_verify/.test(s.command)) === cmds.steps.findIndex((s) => s.name === 'npm publish') + 1])
 
   // 8. runtime layer: what the entry really registers in a child process
   const runtime = await call('publish_gate_tools', { dir: sibling('dsh-page-monitor') })

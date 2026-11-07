@@ -1,6 +1,6 @@
 {
   "name": "@bushizhanghan/dsh-publish-gate",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Helps DSH plugin AUTHORS publish their plugins: a gate that turns every silent failure in the publish path into a deterministic check. Manifest layer — package.json completeness, BOM, YAML/JSON parseability, entry paths that point at no file, a patch the manifest never declares, patch insert correctness, a build whose lib/ is older than src/, inject services that are missing or misspelled, npm scope permissions, GitHub repo and token state, market entry format, LICENSE/README, tests. Artifact layer — runs `npm pack --dry-run` and reads what npm will really ship: code missing from the tarball, an unpacked patch, oversize packages, dev directories. Runtime layer — imports the entry in an isolated child process, calls apply(ctx), and reports tools that never register, missing execute, duplicate names, throwing presentCall and card kinds the host does not render. Browser half — loads the client bundle against a fake window.__ModuleLoader__ and reports a bundle that never loads, returns no apply, throws, registers nothing, or uses a service its own inject array omits, because a panel that never appears looks like a UI bug, not a packaging one. Then GitHub + npm + market, and a post-publish shasum check that proves the registry holds these exact bytes. 帮助插件作者一键发布：写完插件后跑一遍门禁（清单 / 产物 / 运行时 / 浏览器半边），把发布链路上的每个静默坑变成确定性检查，然后 GitHub + npm + 市场一键三连。",
   "type": "module",
   "main": "lib/index.js",
