@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0
+
+- `publish_gate_commands` now agrees with the rules: a prerelease version gets `npm publish --tag next`
+  instead of a bare publish that would move `latest`.
+- New step `tag the shipped commit` (`git tag v<version> && git push origin v<version>`). The gate has
+  warned about a missing tag since 0.5.0 and the command list never mentioned tagging — I wrote a
+  separate script to do it because the instructions never said to.
+
 ## 0.19.0
 
 - `prerelease-published-as-latest` (warn): a `-beta` / `-rc` version with no `publishConfig.tag`.

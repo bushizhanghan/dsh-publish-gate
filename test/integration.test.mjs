@@ -2,6 +2,9 @@
 // against the real published plugins.
 import { apply } from '../lib/index.js'
 import { fileURLToPath } from 'node:url'
+import { mkdtempSync, writeFileSync as writeFile, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 // Sibling plugin checkouts resolved from this file, so the workspace can move.
 const HERE = fileURLToPath(new URL('.', import.meta.url)).replace(/\\/g, '/')
@@ -84,12 +87,23 @@ try {
 
   // 7. commands
   const cmds = await call('publish_gate_commands', { dir: sibling('dsh-page-monitor'), owner: 'bushizhanghan' })
-  results.push(['commands lists the pipeline', cmds.ok === true && cmds.steps.length === 7 && cmds.steps[0].done === true])
+  results.push(['commands lists the pipeline', cmds.ok === true && cmds.steps.length === 8 && cmds.steps[0].done === true])
   results.push(['commands flags unscoped names', /UNSCOPED/.test(JSON.stringify(cmds.steps)) === false])
   // The publish step must be runnable on this machine and followed by the
   // shasum check, or the author has no way to know the registry holds the bytes.
   const publishStep = cmds.steps.find((s) => s.name === 'npm publish')
   results.push(['commands publish step is platform-runnable', /npm publish --access public/.test(publishStep.command) && (process.platform !== 'win32' || publishStep.command.startsWith('cmd /c'))])
+  // A prerelease must not go to `latest`: the command the tool prints has to
+  // carry the tag, or the rule and the instructions disagree.
+  const preDir = mkdtempSync(join(tmpdir(), 'pg-cmd-pre-'))
+  try {
+    writeFile(join(preDir, 'package.json'), JSON.stringify({ name: '@bushizhanghan/x', version: '1.0.0-beta.1', repository: { type: 'git', url: 'https://github.com/bushizhanghan/x.git' } }))
+    const pre = await call('publish_gate_commands', { dir: preDir, owner: 'bushizhanghan' })
+    const preStep = pre.steps.find((s) => s.name === 'npm publish')
+    results.push(['commands add --tag for a prerelease', /--tag next/.test(preStep.command)])
+  } finally {
+    rmSync(preDir, { recursive: true, force: true })
+  }
   results.push(['commands pairs publish with the shasum check', cmds.steps.findIndex((s) => /publish_gate_verify/.test(s.command)) === cmds.steps.findIndex((s) => s.name === 'npm publish') + 1])
 
   // 8. runtime layer: what the entry really registers in a child process
