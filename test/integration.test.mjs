@@ -19,6 +19,7 @@ try {
   const expected = [
     'publish_gate',
     'publish_gate_tools',
+    'publish_gate_client',
     'publish_gate_verify',
     'publish_gate_patch',
     'publish_gate_market',
@@ -90,6 +91,12 @@ try {
   const runtime = await call('publish_gate_tools', { dir: sibling('dsh-page-monitor') })
   results.push(['publish_gate_tools lists the registered tools', runtime.ok === true && runtime.tools.length >= 4 && runtime.tools.every((t) => t.hasExecute)])
   results.push(['publish_gate_tools finds no card-kind bug', runtime.findings.every((f) => f.rule !== 'tool-bad-card-kind')])
+
+  // 8b. the browser half: weapp-loop is the only real client bundle here
+  const client = await call('publish_gate_client', { dir: sibling('dsh-weapp-loop') })
+  results.push(['publish_gate_client loads the real bundle', client.ok === true && client.client.loaded === 1 && client.client.hasApply === true])
+  results.push(['the real bundle registers into a service', client.client.registrations.length > 0])
+  results.push(['publish_gate_client reports no blockers on it', client.findings.every((f) => f.severity !== 'error')])
 
   // 9. post-publish verification compares real bytes, not version numbers.
   // 0.1.6 is published and this tree has moved on, so the bytes must differ.

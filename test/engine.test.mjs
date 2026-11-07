@@ -1,16 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   bumpPatch,
   CARD_KINDS,
+  checkBuildFreshness,
+  checkClientHalf,
+  checkClientRuntime,
   checkDocs,
   checkEntrySource,
   checkInjectCoverage,
   checkLibHygiene,
   checkMarketEntry,
+  checkMarketReadiness,
   checkPackageJson,
   checkPack,
   checkPatchYml,
@@ -22,6 +26,7 @@ import {
   compareVersions,
   latestPublished,
   renderReport,
+  repoSlug,
   runArtifactChecks,
   runStaticChecks,
 } from '../lib/engine.js'
@@ -198,6 +203,22 @@ test('require() is caught in every call form, not just `const x =`', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  }
+})
+
+test('a tool description that mentions require("x") is prose, not a call', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-require-prose-'))
+  try {
+    goodPlugin(dir)
+    // this plugin fired the rule on its own description before the fix
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  ctx.tools.register({ name: 'good_x', description: 'a fake require("react") module', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+    )
+    const rules = checkEntrySource(dir).map((f) => f.rule)
+    assert.ok(!rules.includes('require-in-esm'), 'a quoted mention must not be read as a call')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
 
@@ -736,5 +757,327 @@ test('every plugin in this workspace is artifact-clean', async () => {
     const { findings } = await runArtifactChecks(dir)
     const errors = findings.filter((f) => f.severity === 'error')
     assert.deepEqual(errors.map((f) => `${f.rule}: ${f.title}`), [], `${dir} still has blockers`)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Manifest rules added in 0.3.0
+// ---------------------------------------------------------------------------
+
+test('a patch file the manifest never declares is inert — and that is an error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-nobundle-'))
+  try {
+    goodPlugin(dir, { dsh: {} })
+    const findings = checkPackageJson(dir)
+    assert.ok(findings.some((f) => f.rule === 'bundle-patch-not-declared' && f.severity === 'error'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('an entry path pointing at a missing file is an error, in both export keys', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-entrypath-'))
+  try {
+    goodPlugin(dir, { main: 'lib/nope.js', exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    const rules = checkPackageJson(dir).map((f) => f.rule)
+    assert.ok(rules.includes('entry-path-missing'), 'main pointing nowhere must be caught')
+    // the client file is also missing, so the same rule fires twice — both are real
+    assert.equal(checkPackageJson(dir).filter((f) => f.rule === 'entry-path-missing').length, 2)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a scoped package without publishConfig.access is a note, not a blocker', () => {  const dir = mkdtempSync(join(tmpdir(), 'gate-access-'))
+  try {
+    goodPlugin(dir)
+    const bare = checkPackageJson(dir).find((f) => f.rule === 'no-publish-config-access')
+    assert.ok(bare)
+    assert.equal(bare.severity, 'info')
+
+    goodPlugin(dir, { publishConfig: { access: 'public' } })
+    assert.equal(checkPackageJson(dir).filter((f) => f.rule === 'no-publish-config-access').length, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('an inject entry nothing ever uses is reported — the typo that never activates', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-injectunused-'))
+  try {
+    goodPlugin(dir)
+    // 'tool' instead of 'tools': cordis waits for a service that does not exist
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      `export const name = 'good'\nexport const inject = ['tools', 'tool']\nexport function apply(ctx, config = {}) {\n  ctx.tools.register({ name: 'good_x', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+    )
+    const unused = checkInjectCoverage(dir).filter((f) => f.rule === 'inject-unused-service')
+    assert.equal(unused.length, 1)
+    assert.match(unused[0].title, /"tool"/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// The browser half
+// ---------------------------------------------------------------------------
+
+/** A client bundle that does the right thing, parameterised for the failure cases. */
+const goodClient = `window.__ModuleLoader__.load({
+  id: 'good',
+  factory: (require) => {
+    const React = require('react')
+    function Panel() { return React.createElement('div', null, 'hi') }
+    function apply(ctx) {
+      ctx.effect(() => ctx.sidebarRightTabs.register({ id: 'good', title: () => 'good' }))
+      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name: 'sidebar.right.pane.tab', key: 'good' }, Panel)))
+    }
+    return { apply, inject: ['slots', 'sidebarRightTabs'] }
+  },
+})`
+
+test('the client half: a working bundle is clean and really registers', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-ok-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), goodClient)
+    assert.deepEqual(checkClientHalf(dir).map((f) => f.rule), [])
+    const { findings, client } = await checkClientRuntime(dir)
+    assert.deepEqual(findings.map((f) => f.rule), [])
+    assert.equal(client.loaded, 1)
+    assert.equal(client.hasApply, true)
+    assert.ok(client.registrations.includes('sidebarRightTabs.register'))
+    assert.ok(client.registrations.includes('slots.register'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a declared bundle that is not there is an error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-missing-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    assert.ok(checkClientHalf(dir).some((f) => f.rule === 'client-file-missing' && f.severity === 'error'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a bundle that never touches __ModuleLoader__ is an error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-loader-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), 'export const apply = () => {}\n')
+    assert.ok(checkClientHalf(dir).some((f) => f.rule === 'client-no-module-loader' && f.severity === 'error'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a bundle that registers nothing is caught at runtime', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-noop-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), 'const x = 1\n')
+    const { findings, client } = await checkClientRuntime(dir)
+    assert.equal(client.loaded, 0)
+    assert.ok(findings.some((f) => f.rule === 'client-load-not-called' && f.severity === 'error'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a factory that throws, returns no apply, or whose apply throws', async () => {
+  const cases = [
+    ['factory throws', `window.__ModuleLoader__.load({ id: 'g', factory: () => { throw new Error('boom') } })`, 'client-factory-throws'],
+    ['no apply', `window.__ModuleLoader__.load({ id: 'g', factory: () => ({ inject: [] }) })`, 'client-no-apply'],
+    [
+      'apply throws',
+      `window.__ModuleLoader__.load({ id: 'g', factory: () => ({ inject: [], apply: (ctx) => { ctx.sidebarRightTabs.register({}) ; throw new Error('late boom') } }) })`,
+      'client-apply-throws',
+    ],
+    [
+      'apply registers nothing',
+      `window.__ModuleLoader__.load({ id: 'g', factory: () => ({ inject: [], apply: () => {} }) })`,
+      'client-no-registration',
+    ],
+  ]
+  for (const [label, source, rule] of cases) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-client-bad-'))
+    try {
+      goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+      writeFileSync(join(dir, 'lib', 'client.js'), source)
+      const { findings } = await checkClientRuntime(dir)
+      assert.ok(findings.some((f) => f.rule === rule), `${label} must report ${rule}, got ${findings.map((f) => f.rule)}`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('the client half: using a service the factory does not inject is reported', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-inject-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(
+      join(dir, 'lib', 'client.js'),
+      `window.__ModuleLoader__.load({ id: 'g', factory: () => ({ inject: [], apply: (ctx) => { ctx.sidebarRightTabs.register({ id: 'g' }) } }) })`,
+    )
+    const { findings } = await checkClientRuntime(dir)
+    const inject = findings.find((f) => f.rule === 'client-inject-missing-sidebarRightTabs')
+    assert.ok(inject, `expected an inject finding, got ${findings.map((f) => f.rule)}`)
+    assert.equal(inject.severity, 'warn')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a syntax error is reported as a parse failure, not a sandbox gap', async () => {  const dir = mkdtempSync(join(tmpdir(), 'gate-client-syntax-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), 'function ( { this is not javascript\n')
+    const { findings } = await checkClientRuntime(dir)
+    assert.ok(findings.some((f) => f.rule === 'client-parse-failed' && f.severity === 'error'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a shipped client bundle with no dsh.client.platform is dead weight', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-platform-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), goodClient)
+    assert.ok(checkPackageJson(dir).some((f) => f.rule === 'client-without-platform' && f.severity === 'error'))
+
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' }, dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } } })
+    assert.equal(checkPackageJson(dir).filter((f) => f.rule === 'client-without-platform').length, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a client bundle outside files is reported from the real tarball', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-pack-client-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './client/index.js' }, dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } } })
+    mkdirSync(join(dir, 'client'), { recursive: true })
+    writeFileSync(join(dir, 'client', 'index.js'), goodClient)
+    const { findings, pack } = await checkPack(dir)
+    // whether npm force-includes it or not, the rule must agree with the tarball
+    const packed = pack.files.some((f) => f.path === 'client/index.js')
+    const reported = findings.some((f) => f.rule === 'pack-omits-client')
+    assert.equal(reported, !packed, `tarball packed=${packed} but rule reported=${reported}`)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a parameters schema with a misspelled type is reported', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-param-type-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  ctx.tools.register({ name: 'good_x', description: 'd', parameters: { type: 'object', properties: { url: { type: 'strin' }, n: { type: 'integer' } } }, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+    )
+    const { findings } = await checkToolRegistrations(dir)
+    const bad = findings.filter((f) => f.rule === 'tool-bad-parameter-type')
+    assert.equal(bad.length, 1, `expected exactly one, got ${JSON.stringify(findings.map((f) => f.rule))}`)
+    assert.match(bad[0].title, /good_x\.url\.type=strin/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('"private": true is a hard stop and a foreign registry is a warning', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-private-'))
+  try {
+    goodPlugin(dir, { private: true })
+    assert.ok(checkPackageJson(dir).some((f) => f.rule === 'private-field-set' && f.severity === 'error'))
+
+    goodPlugin(dir, { publishConfig: { access: 'public', registry: 'https://npm.internal.example/' } })
+    const reg = checkPackageJson(dir).find((f) => f.rule === 'publish-config-registry')
+    assert.ok(reg)
+    assert.equal(reg.severity, 'warn')
+
+    goodPlugin(dir, { publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' } })
+    assert.equal(checkPackageJson(dir).filter((f) => f.rule === 'publish-config-registry').length, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a tarball that carries a .env or a key file is an error', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-secret-'))
+  try {
+    goodPlugin(dir)
+    // no "files" field: npm packs everything .gitignore does not exclude
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    delete pkg.files
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg, null, 2))
+    writeFileSync(join(dir, '.env'), 'NPM_TOKEN=nope\n')
+    const { findings, pack } = await checkPack(dir)
+    assert.ok(pack.files.some((f) => f.path === '.env'), 'the fixture must really be packed')
+    const secret = findings.find((f) => f.rule === 'pack-ships-secret')
+    assert.ok(secret, `expected pack-ships-secret, got ${findings.map((f) => f.rule)}`)
+    assert.equal(secret.severity, 'error')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+test('market readiness: duplicate entry, npm collision, and a repo younger than a day', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-market-'))
+  try {
+    goodPlugin(dir)
+    const entries = [
+      { name: 'bushizhanghan/dsh-good', url: 'https://github.com/bushizhanghan/dsh-good', category: 'dev', npm: '@bushizhanghan/dsh-good' },
+      { name: 'someone/other', url: 'https://github.com/someone/other', category: 'dev', npm: '@bushizhanghan/dsh-good' },
+    ]
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo: { created_at: new Date().toISOString() } })).map((f) => f.rule)
+    assert.ok(rules.includes('market-duplicate-entry'), rules.join(','))
+    assert.ok(rules.includes('market-npm-name-collision'), rules.join(','))
+    assert.ok(rules.includes('market-repo-too-new'), rules.join(','))
+
+    const clean = await checkMarketReadiness(dir, { entries: [], repoInfo: { created_at: '2020-01-01T00:00:00Z' } })
+    assert.deepEqual(clean.map((f) => f.rule), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('market readiness: a package with no GitHub repository cannot be listed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-market-norepo-'))
+  try {
+    goodPlugin(dir, { repository: undefined })
+    assert.equal(repoSlug(dir), null)
+    assert.ok((await checkMarketReadiness(dir, { entries: [] })).some((f) => f.rule === 'market-no-repo'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+test('build freshness: stale lib/ and hand-edited lib/ are different problems', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-build-'))
+  try {
+    goodPlugin(dir)
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src', 'index.ts'), 'export const x = 1\n')
+    writeFileSync(join(dir, 'lib', 'index.js'), 'export const x = 1\n')
+
+    // lib/ older than src/ -> the tarball would carry stale build output.
+    utimesSync(join(dir, 'lib', 'index.js'), new Date('2020-01-01'), new Date('2020-01-01'))
+    assert.deepEqual(checkBuildFreshness(dir).map((f) => f.rule), ['stale-build'])
+
+    // lib/ newer than src/ -> someone hand-edited the build output.
+    utimesSync(join(dir, 'src', 'index.ts'), new Date('2020-01-01'), new Date('2020-01-01'))
+    utimesSync(join(dir, 'lib', 'index.js'), new Date(), new Date())
+    assert.deepEqual(checkBuildFreshness(dir).map((f) => f.rule), ['hand-edited-build'])
+
+    // No src/ at all (plain JS plugin) -> nothing to compare.
+    rmSync(join(dir, 'src'), { recursive: true, force: true })
+    assert.deepEqual(checkBuildFreshness(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
