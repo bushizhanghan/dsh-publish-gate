@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+
+- `checkChangelog()`: `changelog-missing-version` (warn), `changelog-no-versions` (warn), `no-changelog` (info).
+  The changelog is the only place a user can learn what a version changed; a bump without an entry is silent
+  drift, because npm publishes it anyway and the release notes stay one version behind. Headings accept
+  `## 1.2.3`, `### [v1.2.3]` and `# v1.2.3`.
+- An `engines-missing` rule was written and then deleted: `no-engines` already existed. Two rules for one
+  condition would have reported the same gap twice.
 ## 0.8.2
 
 - `publish_gate_verify` now returns `pending: true` when the wait runs out with the version still invisible.

@@ -72,7 +72,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `readme-wrong-package` | README 的安装命令写的是**另一个包名**（从别的插件抄过来没改）。照着装的人装到别的插件上，而且不会报错——那个包真的存在 |
 
 ### 值得在发布前知道的（warn / info）
-`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致），以及市场条目的 `market-*` 全系列。
+`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致）、`changelog-missing-version`（要发的这个版本号在 CHANGELOG 里没有对应标题，npm 照样发，发布说明就永远落后一版）、`changelog-no-versions`（CHANGELOG 里没有版本标题，读者对不上自己装的那版）、`no-changelog`（只是提醒），以及市场条目的 `market-*` 全系列。
 
 ### 产物层：npm 到底会发出什么
 
@@ -216,7 +216,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 93 个引擎单测
+node --test                      # 97 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

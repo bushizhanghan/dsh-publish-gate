@@ -33,6 +33,7 @@ import {
   renderReport,
   repoSlug,
   runArtifactChecks,
+  checkChangelog,
   runStaticChecks,
   waitForPublished,
 } from '../lib/engine.js'
@@ -1660,4 +1661,43 @@ test('waitForPublished: a wait that runs out is pending, not a failure', async (
   const r = await waitForPublished('@scope/pkg', '1.0.0', {}, { waitMs: 30, intervalMs: 1, probe })
   assert.equal(r.pending, true, 'the registry never caught up, so the answer is pending')
   assert.ok(!r.findings.some((f) => f.rule === 'publish-served-mismatch'))
+})
+
+// ---------------------------------------------------------------------
+// Changelog consistency
+// ---------------------------------------------------------------------
+
+const changelogFixture = (version, files = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-changelog-'))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@x/y', version }, null, 2))
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body)
+  return dir
+}
+
+test('checkChangelog: no file is a nudge, an entry for the current version is silent', () => {
+  const a = changelogFixture('1.2.3')
+  assert.deepEqual(checkChangelog(a).map((f) => f.rule), ['no-changelog'])
+
+  const b = changelogFixture('1.2.3', { 'CHANGELOG.md': '# Changes\n\n## 1.2.3\n- did a thing\n\n## 1.2.2\n- older\n' })
+  assert.deepEqual(checkChangelog(b).map((f) => f.rule), [])
+})
+
+test('checkChangelog: a bump without an entry is the drift it exists to catch', () => {
+  const dir = changelogFixture('1.3.0', { 'CHANGELOG.md': '## 1.2.2\n- older\n' })
+  const r = checkChangelog(dir)
+  assert.equal(r.length, 1)
+  assert.equal(r[0].rule, 'changelog-missing-version')
+  assert.equal(r[0].severity, 'warn')
+  assert.match(r[0].title, /no entry for 1\.3\.0/)
+  assert.match(r[0].title, /newest heading is 1\.2\.2/)
+})
+
+test('checkChangelog: headings with a v prefix and brackets still match', () => {
+  const dir = changelogFixture('2.0.0', { 'CHANGELOG.md': '### [v2.0.0]\n- big\n' })
+  assert.deepEqual(checkChangelog(dir).map((f) => f.rule), [])
+})
+
+test('checkChangelog: a changelog with no version headings cannot be matched to a release', () => {
+  const dir = changelogFixture('1.0.0', { 'CHANGELOG.md': '# Changes\n\n- stuff\n' })
+  assert.deepEqual(checkChangelog(dir).map((f) => f.rule), ['changelog-no-versions'])
 })
