@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0
+
+- `tool-input-throws` (error): `publish_gate_tools` gained `fuzz` and `skip`. With `fuzz: true` it drives
+  every declared parameter with a wrong-typed value and reports the tools that throw instead of answering.
+  The host never validates a call against `parameters`, so those values really arrive — this rule exists
+  because the same sweep found 12 real crashes across this workspace's own plugins (a number reaching
+  `path.join` via `session`, `profile`, `casePath` and `workspace`), all of which handed the caller a raw
+  Node TypeError. Only a throw counts: a filter that ignores a number and returns the unfiltered list still
+  answers, and every optional boolean treats any truthy value the same way.
+- One finding per tool+parameter, not one per wrong value.
 ## 0.7.1
 
 - Fixed: a non-string `dir` made every path tool throw a raw Node `TypeError`

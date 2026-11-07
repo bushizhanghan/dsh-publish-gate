@@ -1546,3 +1546,82 @@ test('tool-output-invalid stays silent when execute returns what the schema decl
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// ---------------------------------------------------------------------
+// Input fuzzing
+// ---------------------------------------------------------------------
+
+const fuzzPlugin = (dir, body) => {
+  goodPlugin(dir)
+  writeFileSync(join(dir, 'lib', 'index.js'), body)
+}
+
+test('tool-input-throws: a wrong-typed argument that reaches path code is caught, only when asked', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-fuzz-'))
+  try {
+    fuzzPlugin(
+      dir,
+      [
+        "import { join } from 'node:path'",
+        "export const name = 'fuzz'",
+        'export function apply(ctx) {',
+        '  ctx.tools.register({',
+        "    name: 'fuzz_x',",
+        "    description: 'x',",
+        "    parameters: { type: 'object', properties: { dir: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        '    async execute(args) { return { ok: true, at: join(args.dir) } },',
+        '  })',
+        '}',
+      ].join('\n'),
+    )
+    const off = await checkToolRegistrations(dir, {})
+    assert.ok(!off.findings.some((f) => f.rule === 'tool-input-throws'), 'fuzzing is opt-in')
+
+    const on = await checkToolRegistrations(dir, { fuzz: true })
+    const hit = on.findings.find((f) => f.rule === 'tool-input-throws')
+    assert.ok(hit, on.findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /fuzz_x\(dir: 123\)/)
+    assert.match(hit.fix, /typeof args\.dir !== 'string'/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-input-throws: a guarded tool is silent, and skip keeps a launcher out', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-fuzz-ok-'))
+  try {
+    fuzzPlugin(
+      dir,
+      [
+        "export const name = 'fuzz'",
+        'export function apply(ctx) {',
+        '  ctx.tools.register({',
+        "    name: 'safe_x',",
+        "    description: 'x',",
+        "    parameters: { type: 'object', properties: { dir: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        "    async execute(args) { if (typeof args.dir !== 'string') return { ok: false, error: 'dir must be a string' }; return { ok: true } },",
+        '  })',
+        '  ctx.tools.register({',
+        "    name: 'launcher_x',",
+        "    description: 'x',",
+        "    parameters: { type: 'object', properties: { app: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        '    async execute(args) { throw new Error("launched " + args.app) },',
+        '  })',
+        '}',
+      ].join('\n'),
+    )
+    const all = await checkToolRegistrations(dir, { fuzz: true })
+    const rules = all.findings.filter((f) => f.rule === 'tool-input-throws').map((f) => f.title)
+    assert.equal(rules.length, 1, rules.join(' | '))
+    assert.match(rules[0], /launcher_x/, 'the guarded tool must not be reported')
+
+    const skipped = await checkToolRegistrations(dir, { fuzz: true, fuzzSkip: ['launcher_x'] })
+    assert.deepEqual(skipped.findings.filter((f) => f.rule === 'tool-input-throws'), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
