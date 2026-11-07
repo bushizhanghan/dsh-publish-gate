@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+- `pack-ships-junk` (warn): the tarball carries `.bak-*`, `.orig`, `.swp`, `.log`, `~` or `.DS_Store` debris.
+  Naming a directory in `files` takes everything inside it, so a `lib/client.js.bak-20261026` left behind
+  during a fix ships to every consumer and stays on npm permanently. Both weapp-loop and page-monitor had
+  exactly that file during this session; both were deleted by hand before this rule existed.
 ## 0.11.0
 
 - `tool-no-description` (error), `tool-description-thin` (warn), `tool-no-parameters` (error): the host

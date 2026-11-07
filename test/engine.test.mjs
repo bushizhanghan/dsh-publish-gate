@@ -1805,3 +1805,29 @@ test('tool-no-parameters: reading args with no schema leaves every argument invi
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('pack-ships-junk: a backup copy inside a named directory ships to every consumer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-junk-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(join(dir, 'lib', 'client.js.bak-20261026'), '// old copy of the bundle\n')
+    const { findings } = await checkPack(dir)
+    const hit = findings.find((f) => f.rule === 'pack-ships-junk')
+    assert.ok(hit, findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'warn')
+    assert.match(hit.detail, /client\.js\.bak-20261026/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('pack-ships-junk: a clean package says nothing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-junk-ok-'))
+  try {
+    goodPlugin(dir)
+    const { findings } = await checkPack(dir)
+    assert.ok(!findings.some((f) => f.rule === 'pack-ships-junk'), findings.map((f) => f.rule).join(','))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

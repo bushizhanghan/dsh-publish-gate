@@ -87,6 +87,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `pack-oversize` | 解包 >5 MB 是 error、>1 MB 是 warn，并点名最大的三个文件。测试 fixture 是常见元凶——我的一个插件曾把 20 MB 的算例目录发上去，装了它的人每次都要下 20 MB |
 | `pack-ships-secret` | tarball 里有 `.env` / `.npmrc` / `*.pem` / `*.key` / `id_rsa`。没写 `files` 字段时 npm 会把 `.gitignore` 没排除的一切都打包，而包一发布就是公开的、npm 不会帮你撤回 |
 | `pack-unexpected-dir` | `fixtures` / `test` / `tests` / `src` 被打进包里 |
+| `pack-ships-junk` | 包里带上了 `.bak-20261026` 这类备份或编辑器残留。`files: ["lib"]` 会把 `lib/` 里所有东西都打进去——包括你自己源码的上一版，而且发上去就永久公开 |
 | `pack-script-build` | 有 `prepack` / `prepare`：dry run 用了 `--ignore-scripts`，这次清单**不代表**真正发布时的产物 |
 | `pack-unavailable` | npm 跑不起来（warn）——产物层没跑，别把它当干净 |
 
@@ -220,7 +221,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 102 个引擎单测
+node --test                      # 104 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 
