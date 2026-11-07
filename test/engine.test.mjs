@@ -15,6 +15,7 @@ import {
   checkLibHygiene,
   checkMarketEntry,
   checkMarketReadiness,
+  checkNodeVersion,
   checkPackageJson,
   checkPack,
   checkPatchYml,
@@ -1077,6 +1078,26 @@ test('build freshness: stale lib/ and hand-edited lib/ are different problems', 
     // No src/ at all (plain JS plugin) -> nothing to compare.
     rmSync(join(dir, 'src'), { recursive: true, force: true })
     assert.deepEqual(checkBuildFreshness(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+test('node-too-old: engines.node must cover the newest feature lib/ actually uses', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-node-'))
+  try {
+    goodPlugin(dir, { engines: { node: '>=18' } })
+    writeFileSync(join(dir, 'lib', 'index.js'), "const g = Object.groupBy([1], (x) => x)\nconst p = Promise.withResolvers()\n")
+    const rules = checkNodeVersion(dir).map((f) => f.rule)
+    assert.deepEqual(rules, ['node-too-old', 'node-too-old'])
+
+    // A description that names the feature is prose, not a call.
+    writeFileSync(join(dir, 'lib', 'index.js'), "export const name = 'x'\n// Object.groupBy needs 21\nexport const d = 'Promise.withResolvers is newer'\n")
+    assert.deepEqual(checkNodeVersion(dir), [])
+
+    // Declaring a high enough Node silences it.
+    goodPlugin(dir, { engines: { node: '>=22' } })
+    writeFileSync(join(dir, 'lib', 'index.js'), 'const g = Object.groupBy([1], (x) => x)\n')
+    assert.deepEqual(checkNodeVersion(dir), [])
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

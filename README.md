@@ -135,7 +135,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 ### 代码卫生
 
-`lib-debugger`（error）、`lib-console-log`、`lib-hardcoded-path`（`C:\Users\...` 硬编码）、`lib-url-pathname`（`new URL(...).pathname` 在中文路径上会百分号编码，得用 `fileURLToPath`）。
+`lib-debugger`（error）、`lib-console-log`、`lib-hardcoded-path`（`C:\Users\...` 硬编码）、`lib-url-pathname`（`new URL(...).pathname` 在中文路径上会百分号编码，得用 `fileURLToPath`）、`node-too-old`（`engines.node` 写着 `>=18`，`lib/` 里却用了 `Object.groupBy`（21）或 `Promise.withResolvers`（22）。npm 对 `engines` 只是警告，照样装上，然后在 import 那一刻抛——用户看到的是「插件坏了」，不是版本不匹配）。字符串和注释里的同名文字不算。
 
 ### 构建产物：`src/` 和 `lib/` 谁更新
 
@@ -183,7 +183,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 64 个引擎单测
+node --test                      # 65 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 
