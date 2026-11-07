@@ -1346,3 +1346,92 @@ test('a tag on HEAD is silent, and a non-repository is left to checkGitState', a
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// ---------------------------------------------------------------------
+// Reachable arguments
+// ---------------------------------------------------------------------
+
+test('tool-undeclared-param: an execute that reads an argument the schema never declares', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-param-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'good'",
+        "export const inject = ['tools']",
+        'export function apply(ctx) {',
+        '  ctx.tools.register({',
+        "    name: 'good_x',",
+        "    description: 'd',",
+        "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        '    async execute(args) { return { a: args.alpha, b: args.beta } },',
+        '  })',
+        '}',
+      ].join('\n'),
+    )
+    const r = await checkToolRegistrations(dir)
+    const hits = r.findings.filter((f) => f.rule === 'tool-undeclared-param')
+    assert.equal(hits.length, 1, hits.map((h) => h.title).join(' | '))
+    assert.match(hits[0].title, /args\.beta/)
+    assert.equal(hits[0].severity, 'warn')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-undeclared-param: the destructuring form is caught too', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-param-dest-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'good'",
+        "export const inject = ['tools']",
+        'export function apply(ctx) {',
+        '  ctx.tools.register({',
+        "    name: 'good_x',",
+        "    description: 'd',",
+        "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        '    async execute(args) { const { alpha, gamma = 1 } = args; return { alpha, gamma } },',
+        '  })',
+        '}',
+      ].join('\n'),
+    )
+    const hits = (await checkToolRegistrations(dir)).findings.filter((f) => f.rule === 'tool-undeclared-param')
+    assert.equal(hits.length, 1, hits.map((h) => h.title).join(' | '))
+    assert.match(hits[0].title, /args\.gamma/, 'a default value must not hide the undeclared key')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-undeclared-param: a tool that only reads declared arguments is silent', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-param-ok-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'good'",
+        "export const inject = ['tools']",
+        'export function apply(ctx) {',
+        '  ctx.tools.register({',
+        "    name: 'good_x',",
+        "    description: 'd',",
+        "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
+        "    output: { schema: { type: 'json' } },",
+        '    async execute(args) { return { a: args.alpha } },',
+        '  })',
+        '}',
+      ].join('\n'),
+    )
+    const rules = (await checkToolRegistrations(dir)).findings.map((f) => f.rule)
+    assert.ok(!rules.includes('tool-undeclared-param'), rules.join(','))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

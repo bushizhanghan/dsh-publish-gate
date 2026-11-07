@@ -1,6 +1,6 @@
 {
   "name": "@bushizhanghan/dsh-publish-gate",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Pre-publish gate for DSH plugins in five layers: manifest, dependencies, artifact, runtime, browser half — plus traceability (can you point at the bytes you shipped?). 发布前门禁：清单、依赖、产物、运行时、浏览器半边，外加可追溯性。",
   "type": "module",
   "main": "lib/index.js",
@@ -13,7 +13,8 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "dsh",

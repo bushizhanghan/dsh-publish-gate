@@ -102,6 +102,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `tool-present-call-throws` | `presentCall` 抛——调用记录渲染时炸 |
 | `tool-bad-card-kind` | `card: 'generic'` 的 `kind` 不在宿主认识的那一组里（`other` / `execute` / `search` / `read` / `edit` / `delete` / `fetch`）。注册不报错，卡片渲染坏掉——我五个插件一起踩过 |
 | `tool-bad-parameter-type` | `parameters` 里某个 `type` 写错（`"strin"`）。宿主把 `parameters` 渲染进 prompt、但**从不校验**调用值，所以这个 typo 只是悄悄把类型提示弄丢 |
+| `tool-undeclared-param` | `execute` 读了 `args.x`，但 `parameters.properties` 里没有 `x`。模型只能传 schema 声明过的参数，所以这个值在真实调用里永远是 `undefined`——代码在，永远不跑，也不报错。`args.x`、`args['x']`、`const { x } = args` 三种写法都认 |
 
 ### 浏览器半边：侧栏面板到底会不会出现
 
@@ -210,7 +211,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 80 个引擎单测
+node --test                      # 83 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 
