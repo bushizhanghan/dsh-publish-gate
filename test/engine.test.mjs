@@ -2105,3 +2105,24 @@ test('a changelog that files omits is called out', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+
+// Documented paths rot silently: rename a file, and the README keeps telling
+// people to run something that no longer exists.
+test('a README that names a file which does not exist is called out', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-path-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'README.md'),
+      '# x\n\ndsh plugin --profile desktop add @x/x\n\nRun `node test/integration.test.mjs` next to `lib/index.js`.\n',
+    )
+    const got = checkDocs(dir).filter((f) => f.rule === 'readme-path-missing')
+    assert.equal(got.length, 1)
+    assert.equal(got[0].severity, 'warn')
+    assert.match(got[0].detail, /test\/integration\.test\.mjs/)
+    assert.ok(!/lib\/index\.js/.test(got[0].detail), 'an existing file is not reported')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

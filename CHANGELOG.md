@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.0
+
+- `readme-path-missing` (warn): a README that names `test/…`, `lib/…`, `scripts/…` files that no longer
+  exist. Rename a file and the README keeps telling people to run something that returns ENOENT;
+  nothing else in the repo notices. Only repo-relative paths under directories a plugin owns, so a
+  tutorial example is not a finding.
+- Verified over all nine plugins in this workspace: no false positives, all nine still `e0 w0`.
+
 ## 0.17.0
 
 - `changelog-not-shipped` (warn): a CHANGELOG.md that exists on disk but is not in the tarball. npm
