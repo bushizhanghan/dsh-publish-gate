@@ -9,6 +9,7 @@ import {
   checkBuildFreshness,
   checkClientHalf,
   checkClientRuntime,
+  checkDependencies,
   checkDocs,
   checkEntrySource,
   checkInjectCoverage,
@@ -26,6 +27,7 @@ import {
   checkVersionTaken,
   compareVersions,
   latestPublished,
+  packageOf,
   renderReport,
   repoSlug,
   runArtifactChecks,
@@ -1151,4 +1153,125 @@ test('tool-call-slow: a timeout is a warning, not a defect', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+// ---------------------------------------------------------------------
+// Dependency truth
+// ---------------------------------------------------------------------
+
+test('packageOf: a specifier maps to the package that would be installed', () => {
+  assert.equal(packageOf('@scope/pkg/sub/path'), '@scope/pkg')
+  assert.equal(packageOf('pkg/sub'), 'pkg')
+  assert.equal(packageOf('./local.js'), null)
+  assert.equal(packageOf('../up.js'), null)
+  assert.equal(packageOf('/abs.js'), null)
+  assert.equal(packageOf('node:fs'), null)
+  assert.equal(packageOf('fs/promises'), null, 'a builtin subpath is still a builtin')
+  assert.equal(packageOf('@scope'), null, 'a scope alone is not a package')
+})
+
+test('undeclared-import: an import that package.json does not declare is a blocker', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      "import { thing } from 'left-pad'\nexport const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) { ctx.tools.register({ name: 'good_x', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, execute() {} }) }\n",
+    )
+    const findings = checkDependencies(dir)
+    const hit = findings.find((f) => f.rule === 'undeclared-import')
+    assert.ok(hit, findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /left-pad/)
+    assert.match(hit.title, /lib[\\/]index\.js/, 'the report names the file that imports it')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('dep-in-dev-only: a runtime import satisfied only by devDependencies breaks for the consumer', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-dev-'))
+  try {
+    goodPlugin(dir, { devDependencies: { 'left-pad': '^1.0.0' } })
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      "import { thing } from 'left-pad'\nexport const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) {}\n",
+    )
+    const rules = checkDependencies(dir).map((f) => f.rule)
+    assert.deepEqual(rules, ['dep-in-dev-only'], 'a devDependency must not be reported as undeclared as well')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('unused-dependency: a declared dependency lib/ never imports is a note, not a blocker', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-unused-'))
+  try {
+    goodPlugin(dir, { dependencies: { 'left-pad': '^1.0.0' } })
+    const findings = checkDependencies(dir)
+    assert.equal(findings.length, 1)
+    assert.equal(findings[0].rule, 'unused-dependency')
+    assert.equal(findings[0].severity, 'info')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a declared dependency that is really imported is silent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-ok-'))
+  try {
+    goodPlugin(dir, { dependencies: { 'left-pad': '^1.0.0' } })
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      "import { thing } from 'left-pad'\nimport { readFileSync } from 'node:fs'\nimport { join } from 'node:path'\nexport const name = 'good'\nexport function apply(ctx) {}\n",
+    )
+    assert.deepEqual(checkDependencies(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a tool description that mentions require("react") is prose, not a dependency', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-prose-'))
+  try {
+    goodPlugin(dir)
+    // This is the shape that produced a false positive in this plugin's own source.
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      "export const name = 'good'\nconst HINT = 'the panel does require(\"react\") at runtime'\nexport function apply(ctx) { const x = HINT; return x }\n",
+    )
+    assert.deepEqual(checkDependencies(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('react in the client half is provided by the host loader, not a missing dependency', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-deps-react-'))
+  try {
+    goodPlugin(dir, {
+      exports: { '.': './lib/index.js', './client': './lib/client.js' },
+      dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } },
+    })
+    writeFileSync(
+      join(dir, 'lib', 'client.js'),
+      "window.__ModuleLoader__.load({ id: 'good', factory: (require) => { const React = require('react'); return { apply(ctx) { ctx.slots.register({}) } } } })\n",
+    )
+    assert.deepEqual(checkDependencies(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('version-behind-latest: publishing under the live latest is accepted by npm and reaches nobody', async () => {
+  const doc = { 'dist-tags': { latest: '0.3.4' }, versions: { '0.1.0': {}, '0.3.4': {} } }
+  const behind = await checkVersionTaken('@bushizhanghan/dsh-x', '0.3.0', { doc })
+  assert.deepEqual(behind.map((f) => f.rule), ['version-behind-latest'])
+  assert.equal(behind[0].severity, 'error')
+  assert.match(behind[0].title, /0\.3\.4/)
+
+  const ahead = await checkVersionTaken('@bushizhanghan/dsh-x', '0.3.5', { doc })
+  assert.deepEqual(ahead, [], 'ahead of latest is the normal case')
+
+  const same = await checkVersionTaken('@bushizhanghan/dsh-x', '0.3.4', { doc })
+  assert.deepEqual(same.map((f) => f.rule), ['version-taken'], 'equal is the collision, not the behind case')
 })

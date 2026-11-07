@@ -66,6 +66,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `require-in-esm` | ESM 里 `require()` → `ERR_AMBIGUOUS_MODULE_SYNTAX`，报错不带行号 |
 | `no-license` | 缺 LICENSE |
 | `version-taken` | 这个版本已经在 registry 上，再发是 403 |
+| `version-behind-latest` | 本地版本比 registry 上的 `latest` **旧**。npm 会照收，但 `latest` 继续指向新版本——包上传了，按名字装的人永远拿不到，且没有任何报错 |
 | `registry-unreachable` | registry 回了 500/429 —— 版本检查**没跑**，所以别把它当干净 |
 
 ### 值得在发布前知道的（warn / info）
@@ -137,6 +138,18 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 `lib-debugger`（error）、`lib-console-log`、`lib-hardcoded-path`（`C:\Users\...` 硬编码）、`lib-url-pathname`（`new URL(...).pathname` 在中文路径上会百分号编码，得用 `fileURLToPath`）、`node-too-old`（`engines.node` 写着 `>=18`，`lib/` 里却用了 `Object.groupBy`（21）或 `Promise.withResolvers`（22）。npm 对 `engines` 只是警告，照样装上，然后在 import 那一刻抛——用户看到的是「插件坏了」，不是版本不匹配）。字符串和注释里的同名文字不算。
 
+### 依赖真实性：`lib/` 里 import 的东西，消费者那边真的会装上吗
+
+`npm install` 装一个包时只装它的 `dependencies`，**永远不装 `devDependencies`**。所以在你自己仓库里 `import 'x'` 能跑（依赖树是完整的），到了用户那边 `ERR_MODULE_NOT_FOUND`——插件装上了，然后加载失败，用户看到的是「这个插件坏了」。
+
+| 规则 | 抓什么 |
+|---|---|
+| `undeclared-import` | `lib/` 里 import 了某个包，`package.json` 三个依赖字段里都没有。它在你机器上能解析，只是因为别的包把它提升（hoist）到了 `node_modules` |
+| `dep-in-dev-only` | 只在 `devDependencies` 里声明。这是最常见的一种：写代码时 `npm i -D` 装上了，测试也全绿 |
+| `unused-dependency` | `dependencies` 里声明了，`lib/` 里从没 import。每个装你的人都白下一份（info，因为有些包是运行时动态加载的） |
+
+内置模块（`node:fs`、`fs/promises`）、相对路径、以及浏览器半边从宿主 `require` 拿到的 `react` 都不算。工具描述里那句 `require("react")` 是散文，也不是依赖——这条规则最早就是被它自己误报出来的。
+
 ### 构建产物：`src/` 和 `lib/` 谁更新
 
 有 `src/` 的插件（TypeScript 源码 + 构建出来的 `lib/`）最容易在这件事上翻车，而且两种翻车的表现一模一样——**发出去的字节没人跑过**：
@@ -183,7 +196,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 67 个引擎单测
+node --test                      # 75 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 
