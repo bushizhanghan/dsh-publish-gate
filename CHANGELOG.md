@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.19.0
+
+- `prerelease-published-as-latest` (warn): a `-beta` / `-rc` version with no `publishConfig.tag`.
+  npm publishes to `latest` whatever the suffix says, so `npm i <name>` starts handing everyone an
+  unfinished build and nothing warns.
+- `publish-tag-not-latest` (warn): the version is on the registry but `dist-tags.latest` points at an
+  older one. That is what `--tag next` does when you meant to release: the release looks shipped and
+  is not what anyone installs.
+- README: dropped a made-up `test/…` example path — `readme-path-missing` caught my own prose.
+
 ## 0.18.0
 
 - `readme-path-missing` (warn): a README that names `test/…`, `lib/…`, `scripts/…` files that no longer

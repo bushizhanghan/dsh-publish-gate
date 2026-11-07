@@ -2126,3 +2126,43 @@ test('a README that names a file which does not exist is called out', () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+
+// npm publishes to `latest` whatever the version suffix says, so a -beta goes
+// out to everyone who installs by name. Nothing warns and the publish is green.
+test('a prerelease that would land on latest is called out', () => {
+  const cases = [
+    ['1.2.0-beta.1 with no publishConfig', { version: '1.2.0-beta.1' }, 1],
+    ['1.2.0-beta.1 with publishConfig.tag next', { version: '1.2.0-beta.1', publishConfig: { tag: 'next' } }, 0],
+    ['1.2.0-beta.1 with publishConfig.tag latest', { version: '1.2.0-beta.1', publishConfig: { tag: 'latest' } }, 1],
+    ['a plain 1.2.0', { version: '1.2.0' }, 0],
+  ]
+  for (const [label, patch, want] of cases) {
+    const dir = mkdtempSync(join(tmpdir(), 'pg-pre-'))
+    try {
+      goodPlugin(dir)
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...pkg, ...patch }))
+      const got = checkPackageJson(dir).filter((f) => f.rule === 'prerelease-published-as-latest')
+      assert.equal(got.length, want, label)
+      if (want) assert.equal(got[0].severity, 'warn')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+// `--tag next` leaves latest alone: the new version is on the registry and
+// `npm i <name>` still resolves to the old one.
+test('a published version that is not what latest points at is called out', async () => {
+  const doc = (latest) => ({ versions: { '2.0.0': {} }, 'dist-tags': { latest } })
+  const behind = await checkVersionTaken('x', '2.0.0', { doc: doc('1.0.0') })
+  // version-taken fires too: the version really is on the registry.
+  assert.deepEqual(behind.map((f) => f.rule), ['version-taken', 'publish-tag-not-latest'])
+  assert.equal(behind.find((f) => f.rule === 'publish-tag-not-latest').severity, 'warn')
+  const fine = await checkVersionTaken('x', '2.0.0', { doc: doc('2.0.0') })
+  assert.deepEqual(fine.map((f) => f.rule), ['version-taken'])
+  // not published yet: neither rule fires
+  const fresh = await checkVersionTaken('x', '3.0.0', { doc: doc('2.0.0') })
+  assert.deepEqual(fresh.map((f) => f.rule), [])
+})

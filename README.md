@@ -75,12 +75,14 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `no-license` | 缺 LICENSE |
 | `version-taken` | 这个版本已经在 registry 上，再发是 403 |
 | `version-behind-latest` | 本地版本比 registry 上的 `latest` **旧**。npm 会照收，但 `latest` 继续指向新版本——包上传了，按名字装的人永远拿不到，且没有任何报错 |
+| `publish-tag-not-latest` | 版本已经在 registry 上了，但 `dist-tags.latest` 还指着旧的。`--tag next` 发出去的版本就是这样：看着发出去了，按名字装的人拿到的还是旧的 |
+| `prerelease-published-as-latest` | 版本是 `-beta` / `-rc`，却没写 `publishConfig.tag`。npm 不看后缀，照样发到 `latest`——所有人 `npm i` 装到的都是没做完的构建 |
 | `registry-unreachable` | registry 回了 500/429 —— 版本检查**没跑**，所以别把它当干净 |
 | `npm-not-logged-in` | 这台机器上 npm 没有可用登录（`npm whoami` 报 ENEEDAUTH）。`npm publish` 会在 tarball 打好之后才失败 |
 | `readme-wrong-package` | README 的安装命令写的是**另一个包名**（从别的插件抄过来没改）。照着装的人装到别的插件上，而且不会报错——那个包真的存在 |
 
 ### 值得在发布前知道的（warn / info）
-`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-path-missing`（README 里写的 `test/xxx.mjs` 这类路径已经不存在了，照着敲就是 ENOENT）、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致）、`changelog-missing-version`（要发的这个版本号在 CHANGELOG 里没有对应标题，npm 照样发，发布说明就永远落后一版）、`changelog-no-versions`（CHANGELOG 里没有版本标题，读者对不上自己装的那版）、`no-changelog`（只是提醒）、`changelog-not-shipped`（CHANGELOG 在本地但没进 tarball——npm 只强制带 README 和 LICENSE，你一直更新的那份文件在 registry 页面上看不见），以及市场条目的 `market-*` 全系列。
+`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-path-missing`（README 里点名的仓库内文件路径已经不存在了，照着敲就是 ENOENT）、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致）、`changelog-missing-version`（要发的这个版本号在 CHANGELOG 里没有对应标题，npm 照样发，发布说明就永远落后一版）、`changelog-no-versions`（CHANGELOG 里没有版本标题，读者对不上自己装的那版）、`no-changelog`（只是提醒）、`changelog-not-shipped`（CHANGELOG 在本地但没进 tarball——npm 只强制带 README 和 LICENSE，你一直更新的那份文件在 registry 页面上看不见），以及市场条目的 `market-*` 全系列。
 
 ### 产物层：npm 到底会发出什么
 
@@ -233,7 +235,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 118 个引擎单测
+node --test                      # 120 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 
