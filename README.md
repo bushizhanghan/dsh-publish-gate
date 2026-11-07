@@ -80,7 +80,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `readme-wrong-package` | README 的安装命令写的是**另一个包名**（从别的插件抄过来没改）。照着装的人装到别的插件上，而且不会报错——那个包真的存在 |
 
 ### 值得在发布前知道的（warn / info）
-`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致）、`changelog-missing-version`（要发的这个版本号在 CHANGELOG 里没有对应标题，npm 照样发，发布说明就永远落后一版）、`changelog-no-versions`（CHANGELOG 里没有版本标题，读者对不上自己装的那版）、`no-changelog`（只是提醒），以及市场条目的 `market-*` 全系列。
+`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致）、`changelog-missing-version`（要发的这个版本号在 CHANGELOG 里没有对应标题，npm 照样发，发布说明就永远落后一版）、`changelog-no-versions`（CHANGELOG 里没有版本标题，读者对不上自己装的那版）、`no-changelog`（只是提醒）、`changelog-not-shipped`（CHANGELOG 在本地但没进 tarball——npm 只强制带 README 和 LICENSE，你一直更新的那份文件在 registry 页面上看不见），以及市场条目的 `market-*` 全系列。
 
 ### 产物层：npm 到底会发出什么
 
@@ -193,6 +193,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `git-uncommitted` | 会进 tarball 的文件有未提交改动。发出去的字节不在任何 commit 里，以后复现不出来、也没法 bisect |
 | `git-tag-missing` | HEAD 上没有 `v<version>` tag。发完之后这些字节的唯一记录就是 registry，GitHub release、changelog、市场条目都没法指向一个从没打过 tag 的 commit |
 | `git-tag-elsewhere` | tag 存在但不在 HEAD 上：tag 和 tarball 是两份不同的字节，从那个 tag 构建出来的东西不是你刚发的东西 |
+| `git-tag-unverified` | 读不到 `origin`（断网、私有仓库、没配 remote）。这是 **info**，不是 warn：提交是用 GitHub API 推的时候本地 HEAD 不是发出去的那个 commit，本地 tag 列表证明不了任何事。断网那天我有六个插件被误报「没有 tag」，六个都打了 |
 
 都是 warn：本地试发、私有包、发完再补 tag 都合理。但「发完之后指不出是哪份代码」这件事，事后补不回来。
 
@@ -232,7 +233,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 115 个引擎单测
+node --test                      # 117 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

@@ -1875,6 +1875,27 @@ test('market-fork-of-listed: a plain repo is not treated as a fork', async () =>
   }
 })
 
+// GitHub was unreachable for an hour and six of my nine plugins were told they
+// had no tag. They all did. When origin cannot be read the local tag list proves
+// nothing, because the commit was pushed through the API and local HEAD is a
+// different commit from the one that shipped.
+test('an unreadable origin is not reported as a missing tag', async () => {
+  const cases = [
+    ['origin exists but cannot be read', 'origin\n', ['git-tag-unverified']],
+    ['the repo has no origin at all', '', ['git-tag-missing']],
+  ]
+  for (const [label, remotes, want] of cases) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-tag-unver-'))
+    try {
+      goodPlugin(dir)
+      const got = (await checkTraceability(dir, { inside: 'true', status: '', remote: null, remotes, atHead: '' })).map((f) => f.rule)
+      assert.deepEqual(got, want, label)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
 test('git tags are judged against the shipped commit, not the local one', async () => {
   const cases = [
     ['tag on the shipped commit', { head: 'aaaa', tags: { 'v1.0.0': 'aaaa' } }, []],
@@ -2046,4 +2067,41 @@ test('a finding with an unknown severity is named instead of vanishing', () => {
   assert.deepEqual(straySeverities([{ rule: 'a', severity: 'warn' }, { rule: 'b', severity: 'info' }]), [])
   assert.deepEqual(straySeverities([{ rule: 'b', severity: 'warn' }, { rule: 'x', severity: 'market-fork-of-listed' }]), ['x'])
   assert.deepEqual(straySeverities([{ severity: 'nope' }]), ['<no rule>'])
+})
+
+
+// npm force-includes README and LICENSE, not the changelog: a CHANGELOG.md the
+// files field omits exists on disk, gets updated every version, and never
+// reaches the registry page.
+test('a changelog that files omits is called out', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-cl-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@x/cl',
+        version: '1.0.0',
+        type: 'module',
+        files: ['lib', 'README.md', 'LICENSE'],
+        exports: { '.': './lib/index.js' },
+      }),
+    )
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(join(dir, 'lib', 'index.js'), "export const name = 'cl'\nexport function apply() {}\n")
+    writeFileSync(join(dir, 'README.md'), '# cl\n\ndsh plugin --profile desktop add @x/cl\n')
+    writeFileSync(join(dir, 'LICENSE'), 'MIT License\n')
+    writeFileSync(join(dir, 'CHANGELOG.md'), '# Changelog\n\n## 1.0.0\n\n- first\n')
+    const missing = (await checkPack(dir)).findings.find((f) => f.rule === 'changelog-not-shipped')
+    assert.ok(missing, 'the rule fires when files omits it')
+    assert.equal(missing.severity, 'warn')
+    assert.match(missing.title, /CHANGELOG\.md/)
+
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    pkg.files = ['lib', 'README.md', 'LICENSE', 'CHANGELOG.md']
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg))
+    const shipped = (await checkPack(dir)).findings.find((f) => f.rule === 'changelog-not-shipped')
+    assert.equal(shipped, undefined)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

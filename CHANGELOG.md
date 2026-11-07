@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.17.0
+
+- `changelog-not-shipped` (warn): a CHANGELOG.md that exists on disk but is not in the tarball. npm
+  force-includes README and LICENSE and nothing else, so the file you keep updating never reaches the
+  registry page. Hit it the first time I added a changelog and had to add it to `files` by hand.
+- `git-tag-unverified` (info): origin could not be read, so the tag was not checked. Previously this
+  fell back to the local tag list and claimed a missing tag — six of my nine plugins were flagged on a
+  day GitHub was unreachable, and all six were tagged. The local list proves nothing when the commit
+  was pushed through the API and local HEAD is not the shipped commit.
+- First end-to-end run of the gate with the test layer over all nine plugins in this workspace: every
+  suite passed, and the tag rule was the only false positive.
+
+- `changelog-not-shipped` (warn): a CHANGELOG.md that exists on disk but is not in the tarball. npm
+  force-includes README and LICENSE and nothing else, so the file you keep updating never reaches the
+  registry page. Hit it the first time I added a changelog and had to add it to `files` by hand.
+- First end-to-end run of the gate with the test layer over all nine plugins in this workspace.
+
 ## 0.16.0
 
 - `market-release-behind` (warn): the newest GitHub release is older (or newer) than package.json. A
