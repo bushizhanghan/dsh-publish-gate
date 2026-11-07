@@ -16,7 +16,16 @@ try {
   apply(fakeCtx, { networkTimeoutMs: 8000 })
   const call = async (name, args = {}) => registry.get(name).execute(args, { signal: undefined })
 
-  const expected = ['publish_gate', 'publish_gate_patch', 'publish_gate_market', 'publish_gate_next_version', 'publish_gate_doctor', 'publish_gate_commands']
+  const expected = [
+    'publish_gate',
+    'publish_gate_tools',
+    'publish_gate_verify',
+    'publish_gate_patch',
+    'publish_gate_market',
+    'publish_gate_next_version',
+    'publish_gate_doctor',
+    'publish_gate_commands',
+  ]
   results.push([`${expected.length} tools registered`, expected.every((n) => registry.has(n))])
 
   // 1. gate over a real published plugin
@@ -70,11 +79,23 @@ try {
   const doctor = await call('publish_gate_doctor', { root: WORKSPACE })
   results.push(['doctor sweep finds plugins', doctor.ok === true && doctor.plugins.length >= 4])
   results.push(['doctor sweep ranks by blockers', doctor.plugins.every((p, i, a) => i === 0 || a[i - 1].blockers >= p.blockers)])
+  results.push(['doctor sweep carries the real tarball size', doctor.plugins.every((p) => typeof p.unpackedSize === 'number' && p.unpackedSize > 0)])
 
   // 7. commands
   const cmds = await call('publish_gate_commands', { dir: sibling('dsh-page-monitor'), owner: 'bushizhanghan' })
   results.push(['commands lists the pipeline', cmds.ok === true && cmds.steps.length === 6 && cmds.steps[0].done === true])
   results.push(['commands flags unscoped names', /UNSCOPED/.test(JSON.stringify(cmds.steps)) === false])
+
+  // 8. runtime layer: what the entry really registers in a child process
+  const runtime = await call('publish_gate_tools', { dir: sibling('dsh-page-monitor') })
+  results.push(['publish_gate_tools lists the registered tools', runtime.ok === true && runtime.tools.length >= 4 && runtime.tools.every((t) => t.hasExecute)])
+  results.push(['publish_gate_tools finds no card-kind bug', runtime.findings.every((f) => f.rule !== 'tool-bad-card-kind')])
+
+  // 9. post-publish verification compares real bytes, not version numbers.
+  // 0.1.6 is published and this tree has moved on, so the bytes must differ.
+  const verify = await call('publish_gate_verify', { dir: HERE.replace(/\/test\/?$/, ''), version: '0.1.6' })
+  results.push(['verify reports the local tarball shasum', verify.ok === true && /^[0-9a-f]{40}$/.test(verify.localShasum || '')])
+  results.push(['verify catches a spent version holding different bytes', verify.findings.some((f) => f.rule === 'publish-served-mismatch')])
 } catch (error) {
   console.error('UNEXPECTED THROW:', error)
   results.push(['no-throw', false])
