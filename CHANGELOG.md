@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2
+
+- `publish_gate_verify` now returns `pending: true` when the wait runs out with the version still invisible.
+  Measured on 0.8.1 itself: the version appeared **four minutes** after `npm publish`, so one call cannot
+  outwait it — the cap is 90 s because the host kills a tool call at 120 s. `pending` says "run it again",
+  which is a different answer from "the registry holds different bytes".
 ## 0.8.1
 
 - `publish_gate_verify` gained `waitMs` (capped at 90 s) and reports `waitedMs`. npm answers 202 and keeps

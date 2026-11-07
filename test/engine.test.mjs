@@ -1654,3 +1654,10 @@ test('waitForPublished: waitMs 0 is a single shot, and a mismatch stops the poll
   assert.equal(calls, 1)
   assert.ok(r.findings.some((f) => f.rule === 'publish-served-mismatch'))
 })
+
+test('waitForPublished: a wait that runs out is pending, not a failure', async () => {
+  const probe = async () => [{ rule: 'publish-not-served', severity: 'warn', title: 'not yet' }]
+  const r = await waitForPublished('@scope/pkg', '1.0.0', {}, { waitMs: 30, intervalMs: 1, probe })
+  assert.equal(r.pending, true, 'the registry never caught up, so the answer is pending')
+  assert.ok(!r.findings.some((f) => f.rule === 'publish-served-mismatch'))
+})

@@ -207,6 +207,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 - **产物层用 `npm pack --dry-run`，不用自己推 `files` 规则**：npm 的入包规则（`main` / `exports` 强制入包、README/LICENSE 强制入包、`.npmignore` 优先级）比自己实现的准。唯一的代价是它需要这台机器上有 npm，所以跑不起来时降级成 `pack-unavailable` 而不是报错。
 - **运行时层真的执行插件代码**：这是唯一能回答「装上能不能用」的办法。代价是 `apply()` 会跑，所以：假 ctx 是 Proxy 不落盘、20 秒硬超时、`skipTools` 一键跳过。
 - **`--ignore-scripts`**：dry run 不跑 `prepack`，否则检查会触发一次构建。代价是清单可能和真实产物不同，所以有 `pack-script-build` 把这件事说出来。
+- **发完那几十秒不算失败**：npm 收下包会先回 202，然后六十秒到几分钟里这个版本在 registry 上根本不存在。这个插件自己的 0.8.1 实测是**四分钟**才出现。所以 `publish_gate_verify` 加了 `waitMs` 轮询；一轮等不到就返回 `pending: true`——那是「还没轮到」，不是「没发成功」。单次最多等 90 秒，因为宿主 120 秒就掐掉工具调用，剩下的只能再跑一次。
 - **`publish_gate_verify` 比 shasum，不比版本号**：版本号相同而字节不同（发了又改、或本地根本没发）是最常见的自欺。`npm pack --dry-run` 的 shasum 和 registry 的 `dist.shasum` 是同一套算法，所以这个比较是精确的。
 - **只读**：修不修由你定，每条 finding 都带 `fix` 文案。门禁的职责是把话说清楚，不是替你做决定——所以没有 `--fix`。
 - **确定性**：全部规则是文件内容、子进程或 registry/GitHub API 检查，没有 LLM 调用——一条规则答错，你可以直接看规则。
@@ -215,7 +216,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 92 个引擎单测
+node --test                      # 93 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 
