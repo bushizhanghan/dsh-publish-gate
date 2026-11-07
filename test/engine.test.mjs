@@ -1129,3 +1129,26 @@ test('tool-call-throws: an execute that throws on empty args is caught, and only
     rmSync(dir, { recursive: true, force: true })
   }
 })
+test('tool-call-slow: a timeout is a warning, not a defect', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-slow-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'fixture'",
+        'export function apply(ctx) {',
+        "  ctx.tools.register({ name: 'slow_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "    output: { schema: { type: 'json' }, render: () => ({}) },",
+        '    execute: () => new Promise((r) => setTimeout(r, 400)) })',
+        '}',
+      ].join('\n'),
+    )
+    const r = await checkToolRegistrations(dir, { calls: ['slow_x'], callTimeoutMs: 60 })
+    const rules = r.findings.map((f) => f.rule)
+    assert.ok(rules.includes('tool-call-slow'), rules.join(','))
+    assert.ok(!rules.includes('tool-call-throws'), 'a timeout must not be reported as a throw')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
