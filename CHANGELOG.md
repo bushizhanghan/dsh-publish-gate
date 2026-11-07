@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+- The tag check now asks `git ls-remote origin` instead of `git tag --points-at HEAD`. When the commit is pushed
+  through the GitHub API the local HEAD is not the remote one, so the local form reported `git-tag-missing` on
+  seven of my nine plugins whose tag existed all along. It now compares the tag against the shipped branch
+  head and stays silent when the remote cannot be reached — a check that cannot see the truth must not claim
+  a defect.
 ## 0.13.0
 
 - `market-fork-of-listed` / `market-fork-undisclosed` (warn): the repo is a GitHub fork whose parent is

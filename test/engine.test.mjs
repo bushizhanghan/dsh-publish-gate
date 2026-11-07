@@ -1872,3 +1872,21 @@ test('market-fork-of-listed: a plain repo is not treated as a fork', async () =>
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('git tags are judged against the shipped commit, not the local one', async () => {
+  const cases = [
+    ['tag on the shipped commit', { head: 'aaaa', tags: { 'v1.0.0': 'aaaa' } }, []],
+    ['tag on another commit', { head: 'aaaa', tags: { 'v1.0.0': 'bbbb' } }, ['git-tag-elsewhere']],
+    ['no tag at all', { head: 'aaaa', tags: {} }, ['git-tag-missing']],
+  ]
+  for (const [label, remote, want] of cases) {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-tag-remote-'))
+    try {
+      goodPlugin(dir)
+      const got = (await checkTraceability(dir, { inside: 'true', status: '', remote })).map((f) => f.rule)
+      assert.deepEqual(got, want, label)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
