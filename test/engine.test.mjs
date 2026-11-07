@@ -1831,3 +1831,44 @@ test('pack-ships-junk: a clean package says nothing', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('market-fork-of-listed: a fork of an already-listed repo must say so', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-fork-'))
+  try {
+    goodPlugin(dir, { repository: { type: 'git', url: 'git+https://github.com/bushizhanghan/dsh-workbuddy-harness.git' } })
+    const entries = [{ name: 'upstream', url: 'https://github.com/Faide-cyber/dsh-workbuddy', category: 'model' }]
+    const repoInfo = { fork: true, created_at: '2026-01-01T00:00:00Z', parent: { full_name: 'Faide-cyber/dsh-workbuddy' } }
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo })).map((f) => f.rule)
+    assert.ok(rules.includes('market-fork-of-listed'), rules.join(','))
+    assert.ok(rules.includes('market-fork-undisclosed'), rules.join(','))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('market-fork-of-listed: naming the upstream clears the undisclosed warning', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-fork-ok-'))
+  try {
+    goodPlugin(dir, { repository: { type: 'git', url: 'git+https://github.com/bushizhanghan/dsh-workbuddy-harness.git' } })
+    writeFileSync(join(dir, 'README.md'), '# Fork\n\nA fork of Faide-cyber/dsh-workbuddy. Do not install both.\n')
+    const entries = [{ name: 'upstream', url: 'https://github.com/Faide-cyber/dsh-workbuddy', category: 'model' }]
+    const repoInfo = { fork: true, created_at: '2026-01-01T00:00:00Z', parent: { full_name: 'Faide-cyber/dsh-workbuddy' } }
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo })).map((f) => f.rule)
+    assert.ok(rules.includes('market-fork-of-listed'), rules.join(','))
+    assert.ok(!rules.includes('market-fork-undisclosed'), rules.join(','))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('market-fork-of-listed: a plain repo is not treated as a fork', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-fork-none-'))
+  try {
+    goodPlugin(dir)
+    const repoInfo = { fork: false, created_at: '2026-01-01T00:00:00Z' }
+    const rules = (await checkMarketReadiness(dir, { entries: [], repoInfo })).map((f) => f.rule)
+    assert.deepEqual(rules, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

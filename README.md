@@ -141,6 +141,8 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `market-duplicate-entry` | 这个仓库**已经在目录里**。再提一个 PR 就是同一仓库的第二条条目，reviewer 会拒。版本升级根本不需要 PR——目录条目只存 `url` |
 | `market-npm-name-collision` | 另一个条目也在发同一个 npm 包，安装路径会互相盖 |
 | `market-repo-too-new` | 仓库创建不满 24 小时。门禁会报 `0.0 days old` 然后**自己重跑**，PR 不会丢，但在那之前什么都不会合 |
+| `market-fork-of-listed` | 这个仓库是某个**已经在目录里**的仓库的 fork。两条条目装的代码抢同一批 id，两个都装就有一个被静默盖掉——而且 reviewer 会把"没写"当成"隐瞒 fork" |
+| `market-fork-undisclosed` | 是 fork，但 README 和 package.json 里都没有上游的 `owner/repo` |
 | `market-no-repo` | `package.json` 里没有 GitHub 地址，没东西可提交 |
 | `market-unavailable` | 目录拉不到（warn）——这几条没跑，别把它当干净 |
 
@@ -221,7 +223,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 104 个引擎单测
+node --test                      # 107 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

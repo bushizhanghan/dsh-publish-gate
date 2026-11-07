@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0
+
+- `market-fork-of-listed` / `market-fork-undisclosed` (warn): the repo is a GitHub fork whose parent is
+  already in the catalogue, and nothing says so. A submission was blocked for exactly this: the entry
+  described the fork as if it were original work, and both plugins claim the same provider id, so installing
+  both silently shadows one of them. The check uses the `fork` and `parent.full_name` fields of the repo
+  metadata the market layer already fetches.
 ## 0.12.0
 
 - `pack-ships-junk` (warn): the tarball carries `.bak-*`, `.orig`, `.swp`, `.log`, `~` or `.DS_Store` debris.
