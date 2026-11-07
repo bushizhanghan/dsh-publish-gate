@@ -34,6 +34,7 @@ import {
   repoSlug,
   runArtifactChecks,
   runStaticChecks,
+  waitForPublished,
 } from '../lib/engine.js'
 
 /** Build a minimal valid plugin. */
@@ -1624,4 +1625,32 @@ test('tool-input-throws: a guarded tool is silent, and skip keeps a launcher out
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// ---------------------------------------------------------------------
+// Post-publish polling
+// ---------------------------------------------------------------------
+
+test('waitForPublished: the 202-then-404 window is waited out, not reported as missing', async () => {
+  let calls = 0
+  const probe = async () => {
+    calls += 1
+    if (calls < 3) return [{ rule: 'publish-not-served', severity: 'warn', title: 'not yet' }]
+    return [{ rule: 'publish-served', severity: 'info', title: 'match' }]
+  }
+  const r = await waitForPublished('@scope/pkg', '1.0.0', {}, { waitMs: 5000, intervalMs: 1, probe })
+  assert.equal(calls, 3, 'it polls until the bytes appear')
+  assert.ok(r.findings.some((f) => f.rule === 'publish-served'))
+  assert.ok(r.waitedMs >= 0)
+})
+
+test('waitForPublished: waitMs 0 is a single shot, and a mismatch stops the poll', async () => {
+  let calls = 0
+  const probe = async () => {
+    calls += 1
+    return [{ rule: 'publish-served-mismatch', severity: 'error', title: 'different bytes' }]
+  }
+  const r = await waitForPublished('@scope/pkg', '1.0.0', {}, { waitMs: 0, probe })
+  assert.equal(calls, 1)
+  assert.ok(r.findings.some((f) => f.rule === 'publish-served-mismatch'))
 })

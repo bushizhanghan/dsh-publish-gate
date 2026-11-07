@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1
+
+- `publish_gate_verify` gained `waitMs` (capped at 90 s) and reports `waitedMs`. npm answers 202 and keeps
+  the version invisible for 60–180 s after a publish, so the single-shot check reported "not on the registry"
+  for releases that had already succeeded — it happened on this plugin own 0.8.0 publish, which stayed
+  invisible for over three minutes. `waitForPublished()` polls until the shasum appears; `waitMs: 0` keeps
+  the old single-shot behaviour, and a real mismatch stops the poll immediately.
 ## 0.8.0
 
 - `tool-input-throws` (error): `publish_gate_tools` gained `fuzz` and `skip`. With `fuzz: true` it drives
