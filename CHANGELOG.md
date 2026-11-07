@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.0
+
+- Three rules shipped with a *rule name* in their severity slot: `market-repo-too-new`,
+  `test-script-dir-arg` and `tool-missing-output-schema` were built as
+  `F(rule, "some-other-rule", "a-third-rule", "warn", title, ...)`, because a string replace aimed at
+  RULE_ORDER matched an earlier `F(...)` call instead and pushed the new names into its arguments.
+  Nothing failed: a finding whose severity is not error/warn/info falls out of every counter and never
+  reaches the report, so the rules looked like they simply never fired. Fixed all three, added the six
+  rule names that never made it into RULE_ORDER, and added a source scan that fails when any `F(...)`
+  call passes something other than an error/warn/info literal (or a ternary of two of them).
+
 ## 0.14.0
 
 - New test layer: `checkTestRun` runs `node --test` in the plugin directory and reports `tests-fail`

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import {
   bumpPatch,
   CARD_KINDS,
@@ -1928,6 +1928,81 @@ test('checkTestRun: a missing test directory is left to checkTests', async () =>
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'run-y', version: '1.0.0', type: 'module' }))
     assert.deepEqual(await checkTestRun(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+
+// Three rules shipped with their severity slot filled by the *next* rule name,
+// because a string replace aimed at RULE_ORDER matched an earlier F(...) call
+// instead. Nothing failed: a finding whose severity is not error/warn/info
+// simply falls out of every counter and never appears in the report. Scan the
+// source, because the damage is in the argument order, not the behaviour.
+test('every finding is constructed with a severity the report understands', () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const src = readFileSync(join(here, '..', 'lib', 'engine.js'), 'utf8')
+  const offenders = []
+  let seen = 0
+  for (const m of src.matchAll(/F\(\s*'(?:[^'\\]|\\.)*',\s*([^,\n]+)/g)) {
+    seen += 1
+    const sev = m[1].trim()
+    const literal = /^'(?:error|warn|info)'$/.test(sev)
+    const ternary = /'(?:error|warn|info)'\s*:\s*'(?:error|warn|info)'/.test(sev)
+    if (!literal && !ternary) offenders.push(sev)
+  }
+  assert.ok(seen > 100, 'the scan found the call sites')
+  assert.deepEqual(offenders, [])
+})
+
+test('a young repo is a warning, not a rule name in the severity slot', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-young-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@x/young',
+        version: '1.0.0',
+        type: 'module',
+        repository: { type: 'git', url: 'git+https://github.com/x/young.git' },
+        exports: { '.': './lib/index.js' },
+        files: ['lib'],
+      }),
+    )
+    const findings = await checkMarketReadiness(dir, {
+      entries: [],
+      repoInfo: { created_at: new Date(Date.now() - 3_600_000).toISOString(), fork: false, full_name: 'x/young' },
+    })
+    const tooNew = findings.find((f) => f.rule === 'market-repo-too-new')
+    assert.ok(tooNew, 'the rule fires')
+    assert.equal(tooNew.severity, 'warn')
+    assert.match(tooNew.title, /1\.0h old/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the test-script and output-schema findings keep their severities', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-sev-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: '@x/sev', version: '1.0.0', type: 'module', scripts: { test: 'node --test test/' } }),
+    )
+    mkdirSync(join(dir, 'test'), { recursive: true })
+    writeFileSync(join(dir, 'test', 'a.test.mjs'), "import { test } from 'node:test'\ntest('ok', () => {})\n")
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      "export const name = 'sev'\nexport const inject = []\nexport function apply(ctx) {\n  ctx.tools.register({ name: 'sev_x', description: 'Returns a count from a directory path.', parameters: { type: 'object', properties: {} }, execute: async () => ({ ok: true }) })\n}\n",
+    )
+    const scriptFinding = checkTests(dir).find((f) => f.rule === 'test-script-dir-arg')
+    assert.ok(scriptFinding, 'the rule fires')
+    assert.equal(scriptFinding.severity, 'warn')
+    const { findings } = await checkToolRegistrations(dir, { timeoutMs: 20_000 })
+    const noSchema = findings.find((f) => f.rule === 'tool-missing-output-schema')
+    assert.ok(noSchema, 'the rule fires')
+    assert.equal(noSchema.severity, 'warn')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
