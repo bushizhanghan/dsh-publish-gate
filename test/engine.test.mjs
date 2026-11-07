@@ -24,6 +24,7 @@ import {
   checkReadmeTruth,
   checkTests,
   checkToolRegistrations,
+  checkTraceability,
   checkVersionTaken,
   compareVersions,
   latestPublished,
@@ -1274,4 +1275,74 @@ test('version-behind-latest: publishing under the live latest is accepted by npm
 
   const same = await checkVersionTaken('@bushizhanghan/dsh-x', '0.3.4', { doc })
   assert.deepEqual(same.map((f) => f.rule), ['version-taken'], 'equal is the collision, not the behind case')
+})
+
+// ---------------------------------------------------------------------
+// Traceability: can you point at the bytes you published?
+// ---------------------------------------------------------------------
+
+test('git-uncommitted: a modified file that ships is published from no commit', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-trace-dirty-'))
+  try {
+    goodPlugin(dir)
+    const dirty = await checkTraceability(dir, {
+      status: ' M lib/index.js\n?? README.md\n',
+      atHead: 'v1.0.0',
+      packFiles: ['lib/index.js', 'README.md', 'package.json'],
+    })
+    assert.deepEqual(dirty.map((f) => f.rule), ['git-uncommitted'])
+    assert.equal(dirty[0].severity, 'warn')
+    assert.match(dirty[0].title, /2 file\(s\)/, 'both the modified and the untracked one ship')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('git-uncommitted: a dirty file that is not in the tarball is not a finding', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-trace-clean-'))
+  try {
+    goodPlugin(dir)
+    const clean = await checkTraceability(dir, {
+      status: ' M notes/scratch.md\n',
+      atHead: 'v1.0.0',
+      packFiles: ['lib/index.js', 'package.json'],
+    })
+    assert.deepEqual(clean, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('git-tag-missing: nothing points at the published bytes afterwards', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-trace-notag-'))
+  try {
+    goodPlugin(dir)
+    const f = await checkTraceability(dir, { status: '', atHead: '', tagExists: false })
+    assert.deepEqual(f.map((x) => x.rule), ['git-tag-missing'])
+    assert.match(f[0].title, /v1\.0\.0/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('git-tag-elsewhere: the tag exists but holds different bytes', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-trace-elsewhere-'))
+  try {
+    goodPlugin(dir)
+    const f = await checkTraceability(dir, { status: '', atHead: 'v0.9.0', tagExists: true })
+    assert.deepEqual(f.map((x) => x.rule), ['git-tag-elsewhere'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a tag on HEAD is silent, and a non-repository is left to checkGitState', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-trace-ok-'))
+  try {
+    goodPlugin(dir)
+    assert.deepEqual(await checkTraceability(dir, { status: '', atHead: 'v1.0.0' }), [])
+    assert.deepEqual(await checkTraceability(dir, { inside: 'false' }), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

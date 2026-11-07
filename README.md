@@ -161,6 +161,20 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 两条都只是 warn：有可能你就是要发手改的产物（我干过）。但发之前你得知道自己在发什么。
 
+### 可追溯性：一周后你还能指出线上那包是哪份代码吗
+
+发布是字节唯一一次离开你机器的时刻。如果这些字节既不在任何 commit 里、也没有 tag，那么一周后——包括你自己在内——没人说得清 registry 上那包是从哪份源码来的。
+
+这不是假想：我发过一版 `1.2.7` 到 npm，仓库的 GitHub release 还停在 `1.2.6`，市场条目指向旧 tarball，维护者直接打回。
+
+| 规则 | 抓什么 |
+|---|---|
+| `git-uncommitted` | 会进 tarball 的文件有未提交改动。发出去的字节不在任何 commit 里，以后复现不出来、也没法 bisect |
+| `git-tag-missing` | HEAD 上没有 `v<version>` tag。发完之后这些字节的唯一记录就是 registry，GitHub release、changelog、市场条目都没法指向一个从没打过 tag 的 commit |
+| `git-tag-elsewhere` | tag 存在但不在 HEAD 上：tag 和 tarball 是两份不同的字节，从那个 tag 构建出来的东西不是你刚发的东西 |
+
+都是 warn：本地试发、私有包、发完再补 tag 都合理。但「发完之后指不出是哪份代码」这件事，事后补不回来。
+
 ## 一个真实的例子
 
 对一个刚从别人那儿接手、准备发布的插件跑 `publish_gate`：
@@ -196,7 +210,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 75 个引擎单测
+node --test                      # 80 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 
