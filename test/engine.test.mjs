@@ -34,6 +34,7 @@ import {
   repoSlug,
   runArtifactChecks,
   checkChangelog,
+  checkTestRun,
   runStaticChecks,
   waitForPublished,
 } from '../lib/engine.js'
@@ -1888,5 +1889,46 @@ test('git tags are judged against the shipped commit, not the local one', async 
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  }
+})
+
+
+// A gate that never runs the suite reports on paperwork: nine of my plugins
+// shipped a test script that could not work, and every rule stayed quiet.
+const testRunFixture = (files) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-run-'))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'run-x', version: '1.0.0', type: 'module' }))
+  mkdirSync(join(dir, 'test'), { recursive: true })
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, 'test', name), body)
+  return dir
+}
+
+test('checkTestRun: a failing suite is an error, a passing one is silent', async () => {
+  const good = testRunFixture({
+    'a.test.mjs': "import { test } from 'node:test'\nimport assert from 'node:assert/strict'\ntest('fine', () => assert.equal(1, 1))\n",
+  })
+  const bad = testRunFixture({
+    'a.test.mjs': "import { test } from 'node:test'\nimport assert from 'node:assert/strict'\ntest('broken', () => assert.equal(1, 2))\n",
+  })
+  try {
+    assert.deepEqual(await checkTestRun(good), [])
+    const findings = await checkTestRun(bad)
+    assert.equal(findings.length, 1)
+    assert.equal(findings[0].rule, 'tests-fail')
+    assert.equal(findings[0].severity, 'error')
+    assert.match(findings[0].title, /broken/)
+  } finally {
+    rmSync(good, { recursive: true, force: true })
+    rmSync(bad, { recursive: true, force: true })
+  }
+})
+
+test('checkTestRun: a missing test directory is left to checkTests', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-norun-'))
+  try {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'run-y', version: '1.0.0', type: 'module' }))
+    assert.deepEqual(await checkTestRun(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })

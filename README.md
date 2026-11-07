@@ -8,6 +8,10 @@
 
 门禁分三层：**清单层**看 package.json / patch / 入口源码，**产物层**真的跑一遍 `npm pack --dry-run` 看 npm 到底会发出什么，**运行时层**在独立子进程里 `import()` 入口并 `apply(ctx)` 一遍，看它到底注册了什么。
 
+### 测试层：门禁真的会跑一遍你的测试
+
+`tests-fail` / `tests-timeout` / `tests-not-run` 三条规则会以 `node --test` 在插件目录里真跑一次（不经过 `npm test`，因为脚本内容由作者决定、可能 shell 出去）。子进程会去掉继承来的 `NODE_TEST_CONTEXT`——否则当门禁本身跑在 `node --test` 里时，子进程进入 test-child 模式、一个摘要都不打印，看起来像"没有测试"。
+
 ## 典型用法（写完插件后）
 
 ```
@@ -223,7 +227,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 108 个引擎单测
+node --test                      # 110 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

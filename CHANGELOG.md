@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+
+- New test layer: `checkTestRun` runs `node --test` in the plugin directory and reports `tests-fail`
+  (error), `tests-timeout` (warn) and `tests-not-run` (warn). Every other layer reads the paperwork —
+  the manifest, the tarball, the registry — while nine of my own plugins shipped
+  `"test": "node --test test/"`, which throws MODULE_NOT_FOUND on Node 22+ and would have been caught
+  by simply running it. The child drops the inherited NODE_TEST_CONTEXT, because a gate that runs
+  inside `node --test` would otherwise start the suite in test-child mode and see no summary at all.
+
 ## 0.13.1
 
 - The tag check now asks `git ls-remote origin` instead of `git tag --points-at HEAD`. When the commit is pushed
