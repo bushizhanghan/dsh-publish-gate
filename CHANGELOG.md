@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- `tool-output-invalid` (error): a tool result its own `output.schema` rejects. The host validates every
+  result and throws `ToolOutputError`, so the tool is unusable from the first call. Only checked when the
+  caller names the tool in `call`, because calling a tool can launch applications or write files.
+- `npm-not-logged-in` (error) / `npm-scope-mismatch` (warn): ask npm who it is before spending a publish.
+  ENEEDAUTH and the 403 that names neither the token nor the scope both become a message instead of a loss.
+- `readme-wrong-package` (error): the README install line names a different package — a README copied from
+  another plugin. Whoever follows it installs something else, and nothing fails because that package exists.
 ## 0.6.0
 
 - New rule `tool-undeclared-param`: a tool whose `execute` reads `args.x` that

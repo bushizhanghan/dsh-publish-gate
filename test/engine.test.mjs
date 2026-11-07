@@ -20,6 +20,7 @@ import {
   checkPackageJson,
   checkPack,
   checkPatchYml,
+  checkPublishIdentity,
   checkPublishedMatches,
   checkReadmeTruth,
   checkTests,
@@ -1431,6 +1432,116 @@ test('tool-undeclared-param: a tool that only reads declared arguments is silent
     )
     const rules = (await checkToolRegistrations(dir)).findings.map((f) => f.rule)
     assert.ok(!rules.includes('tool-undeclared-param'), rules.join(','))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// ---------------------------------------------------------------------
+// Publish identity and README truth
+// ---------------------------------------------------------------------
+
+test('npm-scope-mismatch: publishing under a scope you are not logged in as', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-identity-'))
+  try {
+    goodPlugin(dir)
+    const mismatch = await checkPublishIdentity(dir, { whoami: 'someone-else' })
+    assert.deepEqual(mismatch.map((f) => f.rule), ['npm-scope-mismatch'])
+    assert.equal(mismatch[0].severity, 'warn')
+    assert.match(mismatch[0].title, /@bushizhanghan/)
+
+    const ok = await checkPublishIdentity(dir, { whoami: 'bushizhanghan' })
+    assert.deepEqual(ok, [], 'the owner of the scope is not a warning')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('readme-wrong-package: an install line copied from another plugin is a blocker', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-readme-pkg-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'README.md'),
+      '# good\n\n```sh\ndsh plugin --profile desktop add @bushizhanghan/dsh-page-monitor\n```\n\n## Tools\n\n- `good_x` — does a thing.\n',
+    )
+    const hits = checkDocs(dir).filter((f) => f.rule === 'readme-wrong-package')
+    assert.equal(hits.length, 1, hits.map((h) => h.title).join(' | '))
+    assert.equal(hits[0].severity, 'error')
+    assert.match(hits[0].title, /dsh-page-monitor/)
+    assert.match(hits[0].title, /dsh-good/, 'the message names the right package')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('readme-wrong-package: the correct install line, a placeholder and a github: spec are all silent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-readme-ok-'))
+  try {
+    goodPlugin(dir)
+    for (const line of [
+      'dsh plugin --profile desktop add @bushizhanghan/dsh-good',
+      'dsh plugin add @bushizhanghan/dsh-good --profile desktop',
+      'dsh plugin --profile desktop add <pkg>',
+      'dsh plugin --profile desktop add github:someone/repo',
+    ]) {
+      writeFileSync(join(dir, 'README.md'), `# good\n\n\`\`\`sh\n${line}\n\`\`\`\n`)
+      const hits = checkDocs(dir).filter((f) => f.rule === 'readme-wrong-package')
+      assert.deepEqual(hits, [], `should stay silent for: ${line}`)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-output-invalid: a result the output schema rejects is a blocker, and only when called', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-output-'))
+  try {
+    goodPlugin(dir)
+    // The exact shape of a bug this gate shipped: a closed schema, one error
+    // path still returning an undeclared key.
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'fixture'",
+        'export function apply(ctx) {',
+        "  ctx.tools.register({ name: 'closed_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "    output: { schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } } } },",
+        "    execute: async () => ({ ok: false, error: 'nope' }) })",
+        '}',
+      ].join('\n'),
+    )
+    const quiet = await checkToolRegistrations(dir)
+    assert.ok(!quiet.findings.some((f) => f.rule === 'tool-output-invalid'), 'silent unless the tool is actually called')
+
+    const r = await checkToolRegistrations(dir, { calls: ['closed_x'] })
+    const hit = r.findings.find((f) => f.rule === 'tool-output-invalid')
+    assert.ok(hit, r.findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /error/, 'the offending key is named')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-output-invalid stays silent when execute returns what the schema declares', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-output-ok-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'fixture'",
+        'export function apply(ctx) {',
+        "  ctx.tools.register({ name: 'good_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "    output: { schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, n: { type: 'integer' } } } },",
+        '    execute: async () => ({ ok: true, n: 3 }) })',
+        '}',
+      ].join('\n'),
+    )
+    const r = await checkToolRegistrations(dir, { calls: ['good_x'] })
+    assert.ok(!r.findings.some((f) => f.rule === 'tool-output-invalid'), r.findings.map((f) => f.rule).join(','))
+    assert.ok(!r.findings.some((f) => f.rule === 'tool-call-throws'), r.findings.map((f) => f.rule).join(','))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

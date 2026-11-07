@@ -68,9 +68,11 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `version-taken` | 这个版本已经在 registry 上，再发是 403 |
 | `version-behind-latest` | 本地版本比 registry 上的 `latest` **旧**。npm 会照收，但 `latest` 继续指向新版本——包上传了，按名字装的人永远拿不到，且没有任何报错 |
 | `registry-unreachable` | registry 回了 500/429 —— 版本检查**没跑**，所以别把它当干净 |
+| `npm-not-logged-in` | 这台机器上 npm 没有可用登录（`npm whoami` 报 ENEEDAUTH）。`npm publish` 会在 tarball 打好之后才失败 |
+| `readme-wrong-package` | README 的安装命令写的是**另一个包名**（从别的插件抄过来没改）。照着装的人装到别的插件上，而且不会报错——那个包真的存在 |
 
 ### 值得在发布前知道的（warn / info）
-`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致），以及市场条目的 `market-*` 全系列。
+`npm-scope-mismatch`（登录的账号不是包 scope 的所有者，PUT 会 403，而错误里既不说 token 也不说 scope——我为一个 403 花了一小时）、`unscoped-name`（granular token 的 403）、`repo-missing`、`patch-name-unresolvable`（junction 放错层级）、`inject-unused-service`（`inject` 里写了个拼错的服务名，cordis 一直等它，插件静默不激活）、`no-publish-config-access`（scoped 包没写 `publishConfig.access`，只是提醒，因为命令里本来就带 `--access public`）、`publish-config-registry`（`publishConfig.registry` 指到内网 registry，版本发到别人装不到的地方）、`no-readme` / `readme-no-install` / `readme-no-profile`、`license-mismatch`、`no-tests` / `no-test-files` / `no-test-script`、`no-engines`、`bad-repo-url`、`no-git` / `no-gitignore`、`readme-tool-undocumented`（README 没提这个工具）/ `readme-test-count`（README 写的测试数和真实数不一致），以及市场条目的 `market-*` 全系列。
 
 ### 产物层：npm 到底会发出什么
 
@@ -103,6 +105,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `tool-bad-card-kind` | `card: 'generic'` 的 `kind` 不在宿主认识的那一组里（`other` / `execute` / `search` / `read` / `edit` / `delete` / `fetch`）。注册不报错，卡片渲染坏掉——我五个插件一起踩过 |
 | `tool-bad-parameter-type` | `parameters` 里某个 `type` 写错（`"strin"`）。宿主把 `parameters` 渲染进 prompt、但**从不校验**调用值，所以这个 typo 只是悄悄把类型提示弄丢 |
 | `tool-undeclared-param` | `execute` 读了 `args.x`，但 `parameters.properties` 里没有 `x`。模型只能传 schema 声明过的参数，所以这个值在真实调用里永远是 `undefined`——代码在，永远不跑，也不报错。`args.x`、`args['x']`、`const { x } = args` 三种写法都认 |
+| `tool-output-invalid` | 工具返回的东西**自己的 output schema 不收**。宿主每个结果都拿 schema 校验，不匹配就抛 `ToolOutputError`——工具从第一次调用起就不可用，而报错只给一个 JSON 路径，不给是哪行代码返回的。只有点名 `call` 真的调了才检查。这个插件自己踩过：schema 收紧成 `additionalProperties: false`，但有一条错误分支还在返回 `{ ok, error }` |
 
 ### 浏览器半边：侧栏面板到底会不会出现
 
@@ -211,7 +214,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 83 个引擎单测
+node --test                      # 88 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 

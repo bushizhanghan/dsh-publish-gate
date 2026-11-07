@@ -1,7 +1,7 @@
 {
   "name": "@bushizhanghan/dsh-publish-gate",
-  "version": "0.6.0",
-  "description": "Pre-publish gate for DSH plugins in five layers: manifest, dependencies, artifact, runtime, browser half — plus traceability (can you point at the bytes you shipped?). 发布前门禁：清单、依赖、产物、运行时、浏览器半边，外加可追溯性。",
+  "version": "0.7.0",
+  "description": "Pre-publish gate for DSH plugins: manifest, dependencies, artifact, runtime, browser half, traceability and market readiness. 发布前的七层门禁。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
