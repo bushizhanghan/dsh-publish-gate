@@ -104,6 +104,9 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `tool-present-call-throws` | `presentCall` 抛——调用记录渲染时炸 |
 | `tool-bad-card-kind` | `card: 'generic'` 的 `kind` 不在宿主认识的那一组里（`other` / `execute` / `search` / `read` / `edit` / `delete` / `fetch`）。注册不报错，卡片渲染坏掉——我五个插件一起踩过 |
 | `tool-bad-parameter-type` | `parameters` 里某个 `type` 写错（`"strin"`）。宿主把 `parameters` 渲染进 prompt、但**从不校验**调用值，所以这个 typo 只是悄悄把类型提示弄丢 |
+| `tool-no-description` | 工具没有 description。模型是靠 name + description + parameters 挑工具的，没有描述就只剩名字——工具发出去了，但基本选不中 |
+| `tool-description-thin` | description 少于 30 字符，或者就是把工具名重复一遍。等于没写 |
+| `tool-no-parameters` | execute 读 `args.x`，但整个 `parameters` 都没有。模型拿不到参数清单，不知道该传什么 |
 | `tool-undeclared-param` | `execute` 读了 `args.x`，但 `parameters.properties` 里没有 `x`。模型只能传 schema 声明过的参数，所以这个值在真实调用里永远是 `undefined`——代码在，永远不跑，也不报错。`args.x`、`args['x']`、`const { x } = args` 三种写法都认 |
 | `tool-output-invalid` | 工具返回的东西**自己的 output schema 不收**。宿主每个结果都拿 schema 校验，不匹配就抛 `ToolOutputError`——工具从第一次调用起就不可用，而报错只给一个 JSON 路径，不给是哪行代码返回的。只有点名 `call` 真的调了才检查。这个插件自己踩过：schema 收紧成 `additionalProperties: false`，但有一条错误分支还在返回 `{ ok, error }` |
 | `tool-input-throws` | 把每个声明过的参数**塞一个错类型的值**去调，工具直接抛 `TypeError` 而不是回答。宿主从不拿 `parameters` 校验入参，所以这个值真的会到你的代码里——调用方拿到的是 `The "path" argument must be of type string`，插件日志里没有一行说是哪个工具。这条规则是在自己的工作区里跑出 **12 个真实崩溃** 之后才加的（`session`/`profile`/`casePath`/`workspace` 各一个入口），现在九个插件全绿。默认关：它会把每个工具都调一遍，用 `skip` 点名排除那些会开程序、写文件的 |
@@ -217,7 +220,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 99 个引擎单测
+node --test                      # 102 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

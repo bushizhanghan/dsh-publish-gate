@@ -71,7 +71,7 @@ function goodPlugin(dir, overrides = {}) {
   )
   writeFileSync(
     join(dir, 'lib', 'index.js'),
-    `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx, config = {}) {\n  ctx.tools.register({\n    name: 'good_x',\n    description: 'd',\n    parameters: {},\n    output: { schema: { type: 'json' } },\n    presentCall: () => ({ card: 'generic', title: 'good_x', kind: 'read' }),\n    async execute() {},\n  })\n}\n`,
+    `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx, config = {}) {\n  ctx.tools.register({\n    name: 'good_x',\n    description: 'Reads a directory and returns its tool count.',\n    parameters: {},\n    output: { schema: { type: 'json' } },\n    presentCall: () => ({ card: 'generic', title: 'good_x', kind: 'read' }),\n    async execute() {},\n  })\n}\n`,
   )
   writeFileSync(
     join(dir, 'README.md'),
@@ -595,7 +595,7 @@ test('a card kind the host does not know is an error', async () => {
     pluginWithEntry(
       dir,
       ENTRY_REGISTERS(
-        `  ctx.tools.register({ name: 't', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, presentCall: () => ({ card: 'generic', title: 't', kind: 'tool' }), async execute() {} })`,
+        `  ctx.tools.register({ name: 't', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, presentCall: () => ({ card: 'generic', title: 't', kind: 'tool' }), async execute() {} })`,
       ),
     )
     const f = (await checkToolRegistrations(dir)).findings.find((x) => x.rule === 'tool-bad-card-kind')
@@ -615,7 +615,7 @@ test('a tool with no execute, and two tools with one name, are errors', async ()
     pluginWithEntry(
       dir,
       ENTRY_REGISTERS(
-        `  ctx.tools.register({ name: 't', description: 'd', parameters: {}, output: { schema: { type: 'json' } } })\n  ctx.tools.register({ name: 't', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })`,
+        `  ctx.tools.register({ name: 't', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } } })\n  ctx.tools.register({ name: 't', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })`,
       ),
     )
     const rules = (await checkToolRegistrations(dir)).findings.map((f) => f.rule)
@@ -632,7 +632,7 @@ test('presentCall that throws is an error', async () => {
     pluginWithEntry(
       dir,
       ENTRY_REGISTERS(
-        `  ctx.tools.register({ name: 't', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, presentCall: (args) => ({ card: 'generic', title: args.dir.length, kind: 'read' }), async execute() {} })`,
+        `  ctx.tools.register({ name: 't', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, presentCall: (args) => ({ card: 'generic', title: args.dir.length, kind: 'read' }), async execute() {} })`,
       ),
     )
     const f = (await checkToolRegistrations(dir)).findings.find((x) => x.rule === 'tool-present-call-throws')
@@ -816,7 +816,7 @@ test('an inject entry nothing ever uses is reported — the typo that never acti
     // 'tool' instead of 'tools': cordis waits for a service that does not exist
     writeFileSync(
       join(dir, 'lib', 'index.js'),
-      `export const name = 'good'\nexport const inject = ['tools', 'tool']\nexport function apply(ctx, config = {}) {\n  ctx.tools.register({ name: 'good_x', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+      `export const name = 'good'\nexport const inject = ['tools', 'tool']\nexport function apply(ctx, config = {}) {\n  ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
     )
     const unused = checkInjectCoverage(dir).filter((f) => f.rule === 'inject-unused-service')
     assert.equal(unused.length, 1)
@@ -990,7 +990,7 @@ test('a parameters schema with a misspelled type is reported', async () => {
     goodPlugin(dir)
     writeFileSync(
       join(dir, 'lib', 'index.js'),
-      `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  ctx.tools.register({ name: 'good_x', description: 'd', parameters: { type: 'object', properties: { url: { type: 'strin' }, n: { type: 'integer' } } }, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+      `export const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: { type: 'object', properties: { url: { type: 'strin' }, n: { type: 'integer' } } }, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
     )
     const { findings } = await checkToolRegistrations(dir)
     const bad = findings.filter((f) => f.rule === 'tool-bad-parameter-type')
@@ -1120,7 +1120,7 @@ test('tool-call-throws: an execute that throws on empty args is caught, and only
       [
         "export const name = 'fixture'",
         'export function apply(ctx) {',
-        "  ctx.tools.register({ name: 'good_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "  ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: { type: 'object', properties: {} },",
         "    output: { schema: { type: 'json' }, render: () => ({}) },",
         "    execute: () => { throw new ReferenceError('entry is not defined') } })",
         '}',
@@ -1147,7 +1147,7 @@ test('tool-call-slow: a timeout is a warning, not a defect', async () => {
       [
         "export const name = 'fixture'",
         'export function apply(ctx) {',
-        "  ctx.tools.register({ name: 'slow_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "  ctx.tools.register({ name: 'slow_x', description: 'Reads a directory and returns its tool count.', parameters: { type: 'object', properties: {} },",
         "    output: { schema: { type: 'json' }, render: () => ({}) },",
         '    execute: () => new Promise((r) => setTimeout(r, 400)) })',
         '}',
@@ -1182,7 +1182,7 @@ test('undeclared-import: an import that package.json does not declare is a block
     goodPlugin(dir)
     writeFileSync(
       join(dir, 'lib', 'index.js'),
-      "import { thing } from 'left-pad'\nexport const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) { ctx.tools.register({ name: 'good_x', description: 'd', parameters: {}, output: { schema: { type: 'json' } }, execute() {} }) }\n",
+      "import { thing } from 'left-pad'\nexport const name = 'good'\nexport const inject = ['tools']\nexport function apply(ctx) { ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, execute() {} }) }\n",
     )
     const findings = checkDependencies(dir)
     const hit = findings.find((f) => f.rule === 'undeclared-import')
@@ -1369,7 +1369,7 @@ test('tool-undeclared-param: an execute that reads an argument the schema never 
         'export function apply(ctx) {',
         '  ctx.tools.register({',
         "    name: 'good_x',",
-        "    description: 'd',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         '    async execute(args) { return { a: args.alpha, b: args.beta } },',
@@ -1399,7 +1399,7 @@ test('tool-undeclared-param: the destructuring form is caught too', async () => 
         'export function apply(ctx) {',
         '  ctx.tools.register({',
         "    name: 'good_x',",
-        "    description: 'd',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         '    async execute(args) { const { alpha, gamma = 1 } = args; return { alpha, gamma } },',
@@ -1427,7 +1427,7 @@ test('tool-undeclared-param: a tool that only reads declared arguments is silent
         'export function apply(ctx) {',
         '  ctx.tools.register({',
         "    name: 'good_x',",
-        "    description: 'd',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { alpha: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         '    async execute(args) { return { a: args.alpha } },',
@@ -1510,7 +1510,7 @@ test('tool-output-invalid: a result the output schema rejects is a blocker, and 
       [
         "export const name = 'fixture'",
         'export function apply(ctx) {',
-        "  ctx.tools.register({ name: 'closed_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "  ctx.tools.register({ name: 'closed_x', description: 'Reads a directory and returns its tool count.', parameters: { type: 'object', properties: {} },",
         "    output: { schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } } } },",
         "    execute: async () => ({ ok: false, error: 'nope' }) })",
         '}',
@@ -1538,7 +1538,7 @@ test('tool-output-invalid stays silent when execute returns what the schema decl
       [
         "export const name = 'fixture'",
         'export function apply(ctx) {',
-        "  ctx.tools.register({ name: 'good_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "  ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: { type: 'object', properties: {} },",
         "    output: { schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, n: { type: 'integer' } } } },",
         '    execute: async () => ({ ok: true, n: 3 }) })',
         '}',
@@ -1572,7 +1572,7 @@ test('tool-input-throws: a wrong-typed argument that reaches path code is caught
         'export function apply(ctx) {',
         '  ctx.tools.register({',
         "    name: 'fuzz_x',",
-        "    description: 'x',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { dir: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         '    async execute(args) { return { ok: true, at: join(args.dir) } },',
@@ -1604,14 +1604,14 @@ test('tool-input-throws: a guarded tool is silent, and skip keeps a launcher out
         'export function apply(ctx) {',
         '  ctx.tools.register({',
         "    name: 'safe_x',",
-        "    description: 'x',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { dir: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         "    async execute(args) { if (typeof args.dir !== 'string') return { ok: false, error: 'dir must be a string' }; return { ok: true } },",
         '  })',
         '  ctx.tools.register({',
         "    name: 'launcher_x',",
-        "    description: 'x',",
+        "    description: 'Reads a directory and returns its tool count.',",
         "    parameters: { type: 'object', properties: { app: { type: 'string' } } },",
         "    output: { schema: { type: 'json' } },",
         '    async execute(args) { throw new Error("launched " + args.app) },',
@@ -1734,6 +1734,73 @@ test('the client half: a window-level guard makes the second injection a no-op',
     assert.equal(client.doubleLoad, null)
     assert.equal(client.loaded, 1)
     assert.deepEqual(findings.map((f) => f.rule), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// ---------------------------------------------------------------------
+// Tool documentation: what the model is actually told
+// ---------------------------------------------------------------------
+
+const toolPlugin = (dir, fields) => {
+  goodPlugin(dir)
+  writeFileSync(
+    join(dir, 'lib', 'index.js'),
+    [
+      "export const name = 'doc'",
+      'export function apply(ctx) {',
+      '  ctx.tools.register({',
+      "    name: 'doc_x',",
+      ...fields,
+      '  })',
+      '}',
+    ].join('\n'),
+  )
+}
+
+test('tool-no-description: a tool with no description is unselectable, not just undocumented', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-doc-none-'))
+  try {
+    toolPlugin(dir, ["    output: { schema: { type: 'json' } },", '    async execute() { return { ok: true } },'])
+    const { findings } = await checkToolRegistrations(dir)
+    const hit = findings.find((f) => f.rule === 'tool-no-description')
+    assert.ok(hit, findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /doc_x/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-description-thin: repeating the name is not a description', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-doc-thin-'))
+  try {
+    toolPlugin(dir, [
+      "    description: 'doc_x',",
+      "    output: { schema: { type: 'json' } },",
+      '    async execute() { return { ok: true } },',
+    ])
+    const { findings } = await checkToolRegistrations(dir)
+    assert.ok(findings.some((f) => f.rule === 'tool-description-thin' && f.severity === 'warn'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tool-no-parameters: reading args with no schema leaves every argument invisible', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-doc-params-'))
+  try {
+    toolPlugin(dir, [
+      "    description: 'Reads a session directory and returns the turn count.',",
+      "    output: { schema: { type: 'json' } },",
+      '    async execute(args) { return { ok: true, at: args.dir } },',
+    ])
+    const { findings } = await checkToolRegistrations(dir)
+    const hit = findings.find((f) => f.rule === 'tool-no-parameters')
+    assert.ok(hit, findings.map((f) => f.rule).join(','))
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /args\.dir/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

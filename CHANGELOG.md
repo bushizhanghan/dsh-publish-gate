@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- `tool-no-description` (error), `tool-description-thin` (warn), `tool-no-parameters` (error): the host
+  renders name + description + parameters into the prompt and nothing else, so those three fields are the
+  tool's entire specification. A tool with no description is a name in a list; a tool that reads args with no
+  schema never receives them. All nine of my plugins were clean, so this guards the shape rather than a
+  specific crash — the first two fixtures that had `description: 'd'` did fail, which is the point.
 ## 0.10.0
 
 - `client-double-load` (warn): the client probe now evaluates the bundle a second time against the same
