@@ -831,7 +831,9 @@ test('an inject entry nothing ever uses is reported — the typo that never acti
 // ---------------------------------------------------------------------------
 
 /** A client bundle that does the right thing, parameterised for the failure cases. */
-const goodClient = `window.__ModuleLoader__.load({
+const goodClient = `if (window.__goodLoaded) { /* already injected once */ } else {
+window.__goodLoaded = true
+window.__ModuleLoader__.load({
   id: 'good',
   factory: (require) => {
     const React = require('react')
@@ -842,7 +844,8 @@ const goodClient = `window.__ModuleLoader__.load({
     }
     return { apply, inject: ['slots', 'sidebarRightTabs'] }
   },
-})`
+})
+}`
 
 test('the client half: a working bundle is clean and really registers', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-client-ok-'))
@@ -1700,4 +1703,38 @@ test('checkChangelog: headings with a v prefix and brackets still match', () => 
 test('checkChangelog: a changelog with no version headings cannot be matched to a release', () => {
   const dir = changelogFixture('1.0.0', { 'CHANGELOG.md': '# Changes\n\n- stuff\n' })
   assert.deepEqual(checkChangelog(dir).map((f) => f.rule), ['changelog-no-versions'])
+})
+
+test('the client half: a bundle injected twice throws duplicate registration unless it guards', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-twice-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    // No window-level guard: the second evaluation calls load() again.
+    writeFileSync(
+      join(dir, 'lib', 'client.js'),
+      `window.__ModuleLoader__.load({ id: 'twice', factory: () => ({ inject: [], apply: (ctx) => { ctx.slots.inject('x', () => {}) } }) })`,
+    )
+    const { findings, client } = await checkClientRuntime(dir)
+    assert.match(String(client.doubleLoad), /duplicate factory registration/)
+    const hit = findings.find((f) => f.rule === 'client-double-load')
+    assert.ok(hit, 'expected client-double-load')
+    assert.equal(hit.severity, 'warn')
+    assert.match(hit.fix, /window\.__/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the client half: a window-level guard makes the second injection a no-op', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-client-guard-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './client': './lib/client.js' } })
+    writeFileSync(join(dir, 'lib', 'client.js'), goodClient)
+    const { findings, client } = await checkClientRuntime(dir)
+    assert.equal(client.doubleLoad, null)
+    assert.equal(client.loaded, 1)
+    assert.deepEqual(findings.map((f) => f.rule), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

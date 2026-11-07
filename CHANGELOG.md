@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- `client-double-load` (warn): the client probe now evaluates the bundle a second time against the same
+  `window`, with a loader that throws on a repeated registration. A bundle inserted by two patches (its own,
+  plus any sidebar plugin that injects `dsh-client-modules`) aborted web boot this way. A window-level guard
+  makes it a no-op, which is what the recommended bundle shape now shows.
 ## 0.9.0
 
 - `checkChangelog()`: `changelog-missing-version` (warn), `changelog-no-versions` (warn), `no-changelog` (info).

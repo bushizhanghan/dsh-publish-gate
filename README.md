@@ -124,6 +124,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `client-apply-throws` | `apply(ctx)` 抛 |
 | `client-no-registration` | `apply` 跑完一次服务都没调用——面板不会出现 |
 | `client-inject-missing-<service>` | `apply` 用了 `ctx.sidebarRightTabs` 但 `inject` 数组里没写它。cordis 不会把没声明的服务给你，于是 `ctx.sidebarRightTabs` 是 `undefined`，`apply` 一碰就抛（或静默什么都没注册） |
+| `client-double-load` | 同一个 bundle 被注入了两次（它自己的 patch 一次，注入 `dsh-client-modules` 的侧边栏插件再一次）。loader 按 id 建工厂，第二次注册直接抛错，整个 Web 启动被中断——不是这个面板没了，是所有面板都没了。用 `if (window.__xLoaded) return; window.__xLoaded = true` 挡一下 |
 | `client-parse-failed` | 文件有语法错误。**单独判**：`SyntaxError` 说明 bundle 本身是坏的，别的报错说明是沙箱不够真，两者别混为一谈 |
 | `client-unavailable` | 子进程没跑起来（warn）——这一层没跑，别把它当干净 |
 
@@ -216,7 +217,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 97 个引擎单测
+node --test                      # 99 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 
