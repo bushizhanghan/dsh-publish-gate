@@ -8,6 +8,10 @@
 
 门禁分三层：**清单层**看 package.json / patch / 入口源码，**产物层**真的跑一遍 `npm pack --dry-run` 看 npm 到底会发出什么，**运行时层**在独立子进程里 `import()` 入口并 `apply(ctx)` 一遍，看它到底注册了什么。
 
+### 自检：看不见的 finding
+
+`severity` 不是 `error`/`warn`/`info` 的 finding 会被所有计数器忽略，等于规则从没触发过。`publish_gate` 现在会把这类 finding 提升成一条 `internal-bad-severity` 的 error，测试里还有一条源码扫描盯着 `F(...)` 的第二个参数。这条网加上当天就抓到了我自己的同一个错误。
+
 ### 测试层：门禁真的会跑一遍你的测试
 
 `tests-fail` / `tests-timeout` / `tests-not-run` 三条规则会以 `node --test` 在插件目录里真跑一次（不经过 `npm test`，因为脚本内容由作者决定、可能 shell 出去）。子进程会去掉继承来的 `NODE_TEST_CONTEXT`——否则当门禁本身跑在 `node --test` 里时，子进程进入 test-child 模式、一个摘要都不打印，看起来像"没有测试"。
@@ -143,6 +147,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | 规则 | 抓什么 |
 |---|---|
 | `market-duplicate-entry` | 这个仓库**已经在目录里**。再提一个 PR 就是同一仓库的第二条条目，reviewer 会拒。版本升级根本不需要 PR——目录条目只存 `url` |
+| `market-release-behind` | warn | 最新 GitHub release 比 package.json 旧（或新） | 目录里写着 1.2.7、release 资产还是 1.2.6 时，市场条目装的是旧代码，而描述是新版写的——维护者正是以「描述与 tarball 不符」驳回过一次提交 |
 | `market-npm-name-collision` | 另一个条目也在发同一个 npm 包，安装路径会互相盖 |
 | `market-repo-too-new` | 仓库创建不满 24 小时。门禁会报 `0.0 days old` 然后**自己重跑**，PR 不会丢，但在那之前什么都不会合 |
 | `market-fork-of-listed` | 这个仓库是某个**已经在目录里**的仓库的 fork。两条条目装的代码抢同一批 id，两个都装就有一个被静默盖掉——而且 reviewer 会把"没写"当成"隐瞒 fork" |
@@ -227,7 +232,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 113 个引擎单测
+node --test                      # 115 个引擎单测
 node test/integration.test.mjs   # 27 条集成断言（9 个真实插件作 fixture）
 ```
 

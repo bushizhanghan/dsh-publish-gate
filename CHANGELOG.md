@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.0
+
+- `market-release-behind` (warn): the newest GitHub release is older (or newer) than package.json. A
+  catalogue entry may install `releases/latest/download/<asset>`, so a lagging release serves code the
+  description no longer describes — a reviewer blocked a submission for exactly that.
+- `straySeverities` + `internal-bad-severity`: a finding whose severity is not error/warn/info is counted
+  by nothing and reported nowhere, so the rule looks like it never fires. `publish_gate` now turns any such
+  finding into a loud error instead of dropping it.
+- The source scan added in 0.15.0 caught the same mistake again while building this version: a string
+  replace aimed at RULE_ORDER matched an earlier `F(...)` call and wrote the new rule name into a severity
+  slot. Fixed, and the fix now goes through the RULE_ORDER slice instead of a global replace.
+
 ## 0.15.0
 
 - Three rules shipped with a *rule name* in their severity slot: `market-repo-too-new`,

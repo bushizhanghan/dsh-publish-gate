@@ -35,6 +35,7 @@ import {
   runArtifactChecks,
   checkChangelog,
   checkTestRun,
+  straySeverities,
   runStaticChecks,
   waitForPublished,
 } from '../lib/engine.js'
@@ -2006,4 +2007,43 @@ test('the test-script and output-schema findings keep their severities', async (
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+
+// A catalogue entry may install a release asset rather than npm. When the newest
+// release is older than the directory, the entry serves code the description no
+// longer describes — a reviewer blocked a submission for exactly that.
+test('a GitHub release that lags package.json is a warning', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-rel-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@x/rel',
+        version: '1.2.7',
+        type: 'module',
+        repository: { type: 'git', url: 'git+https://github.com/x/rel.git' },
+      }),
+    )
+    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false } }
+    const behind = await checkMarketReadiness(dir, { ...base, releaseInfo: { tag_name: 'v1.2.6' } })
+    const found = behind.find((f) => f.rule === 'market-release-behind')
+    assert.ok(found, 'the rule fires')
+    assert.equal(found.severity, 'warn')
+    assert.match(found.title, /1\.2\.6.*1\.2\.7/)
+
+    const same = await checkMarketReadiness(dir, { ...base, releaseInfo: { tag_name: 'v1.2.7' } })
+    assert.equal(same.filter((f) => f.rule === 'market-release-behind').length, 0)
+
+    const none = await checkMarketReadiness(dir, { ...base, releaseInfo: {} })
+    assert.equal(none.filter((f) => f.rule === 'market-release-behind').length, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a finding with an unknown severity is named instead of vanishing', () => {
+  assert.deepEqual(straySeverities([{ rule: 'a', severity: 'warn' }, { rule: 'b', severity: 'info' }]), [])
+  assert.deepEqual(straySeverities([{ rule: 'b', severity: 'warn' }, { rule: 'x', severity: 'market-fork-of-listed' }]), ['x'])
+  assert.deepEqual(straySeverities([{ severity: 'nope' }]), ['<no rule>'])
 })
