@@ -30,7 +30,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | 工具 | 作用 |
 |---|---|
 | `publish_gate` | 全量门禁：清单 + 产物 + 运行时 + 浏览器半边 + 网络，返回 `safeToPublish`（`skipPack` / `skipTools` / `skipClient` / `skipNetwork` 可逐层跳过） |
-| `publish_gate_tools` | 只跑运行时层：在子进程里 `apply(ctx)`，看注册了哪些工具、有没有缺 `execute`、重名、`presentCall` 抛错、`card` 用了宿主不认识的值 |
+| `publish_gate_tools` | 只跑运行时层：在子进程里 `apply(ctx)`，看注册了哪些工具、有没有缺 `execute`、重名、`presentCall` 抛错、`card` 用了宿主不认识的值 | 传 `call: ["工具名"]` 可以**真的调一次**（空参数）：注册永远不会执行 `execute`，所以「一调就抛 ReferenceError」这类 bug 只有这一条能看见。默认不调——有些工具会开程序或写文件，你点名才算同意。 |
 | `publish_gate_client` | 只跑浏览器半边：在子进程里假造 `window.__ModuleLoader__`，看 bundle 会不会加载、`apply` 会不会抛、到底往哪个服务注册了东西、`inject` 有没有漏 |
 | `publish_gate_verify` | 发后校验：`npm pack --dry-run` 的 shasum 和 registry 上的 `dist.shasum` 逐字节比，比版本号猜准 |
 | `publish_gate_patch` | 只查 `cordis.patch.yml`——「插件装了但工具没出现」的第一个怀疑对象 |
@@ -183,7 +183,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 65 个引擎单测
+node --test                      # 66 个引擎单测
 node test/integration.test.mjs   # 26 条集成断言（9 个真实插件作 fixture）
 ```
 

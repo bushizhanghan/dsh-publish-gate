@@ -1102,3 +1102,30 @@ test('node-too-old: engines.node must cover the newest feature lib/ actually use
     rmSync(dir, { recursive: true, force: true })
   }
 })
+test('tool-call-throws: an execute that throws on empty args is caught, and only when asked', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-call-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      [
+        "export const name = 'fixture'",
+        'export function apply(ctx) {',
+        "  ctx.tools.register({ name: 'good_x', description: 'x', parameters: { type: 'object', properties: {} },",
+        "    output: { schema: { type: 'json' }, render: () => ({}) },",
+        "    execute: () => { throw new ReferenceError('entry is not defined') } })",
+        '}',
+      ].join('\n'),
+    )
+    // Opt-in: registration alone says nothing about execute.
+    const quiet = await checkToolRegistrations(dir)
+    assert.deepEqual(quiet.findings.map((f) => f.rule), [])
+    // Asked for it, the throw is reported with its own message.
+    const loud = await checkToolRegistrations(dir, { calls: ['good_x'] })
+    const hit = loud.findings.find((f) => f.rule === 'tool-call-throws')
+    assert.ok(hit, loud.findings.map((f) => f.rule).join(','))
+    assert.match(hit.detail, /entry is not defined/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
