@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.22.0
+
+- New tool `publish_gate_link` (the tenth): the local-development layer. It answers "is the code the
+  host loads the code I just edited?" from the profile's own files — `<profile>/node_modules`,
+  `<profile>/node_modules/.modules.yaml`, `<profile>/cordis.patch.yml` — with no network and no
+  package manager. Every failure on this path is silent: the plugin simply never appears.
+- `link-not-installed` (info): the profile has no entry for this package. Normal before the first
+  local install, so it does not raise the blocker count.
+- `link-target-missing` (error): the entry is a link whose target is gone, or whose target has no
+  parseable `package.json`. A dead junction makes the host resolve the package to nothing — this is
+  what broke this machine's Web UI once, with no error anywhere.
+- `link-stale-copy` (warn): the entry is a plain directory, not a link, and its version differs from
+  the checkout. Edits to `lib/` never reach the profile while the checkout's own tests stay green.
+- `pnpm-store-conflict` (warn): the profile's pnpm store major differs from the bundled pnpm's (11).
+  `dsh plugin add link:` then fails with `ERR_PNPM_UNEXPECTED_STORE` before installing anything, and
+  the message names neither the profile nor the major to match. Read from `storeDir` in
+  `.modules.yaml`; measured on this profile: `...\AppData\Local\pnpm\store\v11`, so v11 vs v11 is
+  clean and only a v10 store is flagged.
+- `patch-entry-top-level` (error): the package's row in the profile patch is a top-level `- id:`
+  entry. A top-level row overrides an entry that already exists; it does not add one, so the plugin
+  installs, loads, and never appears. This profile currently has **zero** `insert:` blocks and every
+  row is top-level — exactly the shape the rule exists to catch.
+- The link kind is reported as `junction` / `symlink` / `copy` / `missing`: Node reports a junction
+  and a directory symlink identically (`lstat().isSymbolicLink()`), so the junction is identified by
+  `realpathSync(p) !== p`, the check that distinguishes the form `mklink /J` creates without admin
+  rights from the one that needs them.
+- Tests: 131 engine tests (six new, one per rule, each against a temp profile — the real profile is
+  never read or written) and 32 integration assertions.
+
 ## 0.21.0
 
 - The runtime layer no longer assumes the entry is `lib/index.js`. It resolves `exports["."]` →

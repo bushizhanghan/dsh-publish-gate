@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, utimesSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
@@ -15,14 +15,17 @@ import {
   checkEntrySource,
   checkInjectCoverage,
   checkLibHygiene,
+  checkLocalLink,
   checkMarketEntry,
   checkMarketReadiness,
+  checkMountEntry,
   checkNodeVersion,
   checkPackageJson,
   checkPack,
   checkPatchYml,
   checkPublishIdentity,
   checkPublishedMatches,
+  checkStoreConflict,
   checkReadmeTruth,
   checkTests,
   checkToolRegistrations,
@@ -2226,6 +2229,144 @@ test('entryFile returns null when the manifest names no file that exists', async
     assert.deepEqual(findings.map((f) => f.rule), ['entry-missing'])
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Local development: the profile's node_modules link, pnpm store, mount row
+// ---------------------------------------------------------------------------
+
+test('checkLocalLink reports link-not-installed when the profile has no entry for the package', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-link1-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-linkprof1-'))
+  try {
+    goodPlugin(dir)
+    const r = checkLocalLink(dir, { profileDir: profile })
+    assert.equal(r.kind, 'missing')
+    assert.equal(r.resolves, false)
+    assert.equal(r.path, join(profile, 'node_modules', '@bushizhanghan', 'dsh-good'))
+    assert.deepEqual(r.findings.map((f) => f.rule), ['link-not-installed'])
+    assert.equal(r.findings[0].severity, 'info')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('a junction into the profile resolves and is reported as a junction, not a symlink', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-link2-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-linkprof2-'))
+  try {
+    goodPlugin(dir)
+    const linkPath = join(profile, 'node_modules', '@bushizhanghan', 'dsh-good')
+    mkdirSync(dirname(linkPath), { recursive: true })
+    symlinkSync(dir, linkPath, 'junction')
+    const r = checkLocalLink(dir, { profileDir: profile })
+    assert.equal(r.kind, 'junction')
+    assert.equal(r.resolves, true)
+    assert.equal(String(r.target).toLowerCase(), dir.toLowerCase())
+    assert.deepEqual(r.findings, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('a junction whose target is gone is link-target-missing, the failure that hid the Web UI', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-link3-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-linkprof3-'))
+  try {
+    goodPlugin(dir)
+    const target = join(profile, 'checkout')
+    mkdirSync(target, { recursive: true })
+    const linkPath = join(profile, 'node_modules', '@bushizhanghan', 'dsh-good')
+    mkdirSync(dirname(linkPath), { recursive: true })
+    symlinkSync(target, linkPath, 'junction')
+    rmSync(target, { recursive: true, force: true })
+    const r = checkLocalLink(dir, { profileDir: profile })
+    assert.equal(r.resolves, false)
+    assert.equal(String(r.target).toLowerCase(), target.toLowerCase())
+    assert.deepEqual(r.findings.map((f) => f.rule), ['link-target-missing'])
+    assert.equal(r.findings[0].severity, 'error')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('a plain directory copy is link-stale-copy only when its version differs from the checkout', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-link4-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-linkprof4-'))
+  try {
+    goodPlugin(dir)
+    const copy = join(profile, 'node_modules', '@bushizhanghan', 'dsh-good')
+    mkdirSync(copy, { recursive: true })
+    writeFileSync(join(copy, 'package.json'), JSON.stringify({ name: '@bushizhanghan/dsh-good', version: '0.9.0' }))
+    const stale = checkLocalLink(dir, { profileDir: profile })
+    assert.equal(stale.kind, 'copy')
+    assert.deepEqual(stale.findings.map((f) => f.rule), ['link-stale-copy'])
+    assert.equal(stale.findings[0].severity, 'warn')
+    writeFileSync(join(copy, 'package.json'), JSON.stringify({ name: '@bushizhanghan/dsh-good', version: '1.0.0' }))
+    assert.deepEqual(checkLocalLink(dir, { profileDir: profile }).findings, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('checkStoreConflict names both pnpm majors and the ERR_PNPM_UNEXPECTED_STORE consequence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-store-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-storeprof-'))
+  try {
+    mkdirSync(join(profile, 'node_modules'), { recursive: true })
+    const stateFile = join(profile, 'node_modules', '.modules.yaml')
+    writeFileSync(stateFile, JSON.stringify({ storeDir: 'C:\\Users\\x\\AppData\\Local\\pnpm\\store\\v10', layoutVersion: 5 }))
+    const conflict = checkStoreConflict(dir, { profileDir: profile })
+    assert.equal(conflict.profileMajor, 10)
+    assert.equal(conflict.bundledMajor, 11)
+    assert.equal(conflict.conflict, true)
+    assert.deepEqual(conflict.findings.map((f) => f.rule), ['pnpm-store-conflict'])
+    assert.equal(conflict.findings[0].severity, 'warn')
+    assert.match(conflict.findings[0].title, /v10.*v11/)
+    assert.match(conflict.findings[0].detail, /ERR_PNPM_UNEXPECTED_STORE/)
+    // the same store against a matching bundled major is clean, and the major is overridable
+    writeFileSync(stateFile, JSON.stringify({ storeDir: 'C:\\Users\\x\\AppData\\Local\\pnpm\\store\\v11' }))
+    assert.deepEqual(checkStoreConflict(dir, { profileDir: profile }).findings, [])
+    assert.equal(checkStoreConflict(dir, { profileDir: profile, bundledPnpmMajor: 11 }).conflict, false)
+    assert.equal(checkStoreConflict(dir, { profileDir: profile, bundledPnpmMajor: 10 }).conflict, true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('checkMountEntry separates a top-level row from an insert row and from absence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-mount-'))
+  const profile = mkdtempSync(join(tmpdir(), 'pg-mountprof-'))
+  try {
+    goodPlugin(dir)
+    const patch = join(profile, 'cordis.patch.yml')
+    writeFileSync(patch, '- id: dsh-good\n  name: "@bushizhanghan/dsh-good"\n')
+    const top = checkMountEntry(dir, { profileDir: profile })
+    assert.equal(top.entryFound, true)
+    assert.equal(top.shape, 'top-level')
+    assert.deepEqual(top.findings.map((f) => f.rule), ['patch-entry-top-level'])
+    assert.equal(top.findings[0].severity, 'error')
+
+    writeFileSync(patch, '- insert:\n    - id: dsh-good\n      name: "@bushizhanghan/dsh-good"\n')
+    const inserted = checkMountEntry(dir, { profileDir: profile })
+    assert.equal(inserted.entryFound, true)
+    assert.equal(inserted.shape, 'insert')
+    assert.deepEqual(inserted.findings, [])
+
+    writeFileSync(patch, '- insert:\n    - id: other\n      name: "@me/other"\n')
+    const absent = checkMountEntry(dir, { profileDir: profile })
+    assert.equal(absent.entryFound, false)
+    assert.equal(absent.shape, 'absent')
+    assert.deepEqual(absent.findings, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(profile, { recursive: true, force: true })
   }
 })
 

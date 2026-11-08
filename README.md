@@ -4,7 +4,7 @@
 >
 > 发布一个 DSH 插件有七步，每一步都有一个**直到你付出代价才说话的坑**：`files` 忘了 `lib/` 于是发出去一个空包、PowerShell 写下的 BOM 让 `JSON.parse` 报一个不提 BOM 的错、patch 的 insert 行缩进错了于是插件装上了但**永远不加载**、裸包名让 granular token 收到一个既不说 token 也不说 scope 的 403。这个插件把整条链路的每个静默坑变成一条确定性检查。
 
-八个 agent 工具：全量门禁、运行时注册检查、发后校验、patch 专项、市场条目校验、版本推进、多插件体检、发布命令清单。
+十个 agent 工具：全量门禁、运行时注册检查、发后校验、patch 专项、市场条目校验、版本推进、多插件体检、发布命令清单、本地开发链路诊断。
 
 门禁分三层：**清单层**看 package.json / patch / 入口源码，**产物层**真的跑一遍 `npm pack --dry-run` 看 npm 到底会发出什么，**运行时层**在独立子进程里 `import()` 入口并 `apply(ctx)` 一遍，看它到底注册了什么。
 
@@ -45,6 +45,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_market` | 校验市场条目 YAML（url/name/category/description 双语）；传 `dir` 则改查只有线上才能回答的三件事：这个仓库**已经在目录里**（再开 PR 就是重复条目）、另一个条目也在发同一个 npm 包、仓库还**不满 24 小时**（提交门禁会失败并自己重跑） |
 | `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
 | `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，附带每个插件的真实包体积，看哪个还不能发 |
+| `publish_gate_link` | 本地开发链路：不联网、不调包管理器，只读 profile 自己的 `node_modules` / `.modules.yaml` / `cordis.patch.yml`，回答「宿主现在跑的到底是不是我刚改的这份代码」——链接的形态与目标、pnpm store 的 major、patch 行挂不挂载，一次报全。传 `profile` 可看别的 profile（默认 `~/.dsh/profiles/desktop`） |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
 ## 检查清单
@@ -203,6 +204,37 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 都是 warn：本地试发、私有包、发完再补 tag 都合理。但「发完之后指不出是哪份代码」这件事，事后补不回来。
 
+## 本地开发：宿主跑的到底是不是你刚改的代码
+
+发布之前总有一段时间，插件只在你自己机器上跑。这段路比发布更容易踩空：宿主只加载 `<profile>/node_modules` 下的包，所以你改的是 `E:\...\dsh-x`，跑的是 profile 里那个入口——它可能是一个 junction、一份早就不再同步的拷贝，或者根本没有。这三种情况在宿主那边长得一模一样：插件不出现，没有报错，日志里也没有一行。
+
+`publish_gate_link` 只读 profile 自己的三个文件回答这件事，不联网、不调包管理器、不写任何东西。
+
+| 规则 | 严重度 | 抓什么 |
+|---|---|---|
+| `link-not-installed` | info | profile 的 `node_modules` 里没有这个包。新插件第一次接进宿主之前，这是正常状态 |
+| `link-target-missing` | error | 链接在、目标没了（或目标里没有能解析的 `package.json`）。死掉的 junction 让宿主把包解析成空，插件静默消失——这台机器的 Web UI 就这样坏过一次 |
+| `link-stale-copy` | warn | profile 里是**一份拷贝**而不是链接，且版本和工作区不同：改 `lib/` 永远不会到那边，而你在这边跑测试全绿 |
+| `pnpm-store-conflict` | warn | profile 的 pnpm store 是 v10、随包的 pnpm 是 v11（或反过来）。`dsh plugin add link:` 会在装任何东西之前以 `ERR_PNPM_UNEXPECTED_STORE` 失败，而那条错误既不说 profile、也不说要匹配哪个 major |
+| `patch-entry-top-level` | error | 这个包在 profile 的 `cordis.patch.yml` 里是一条顶层 `- id:` 行。顶层行覆盖树里已有的条目、不新增一条：装上了、加载了、永远不出现。这个坑藏了我两个插件两周 |
+
+链接的三种形态是分开报的：Node 对 junction 和目录符号链接都只说 `isSymbolicLink() === true`，只有 `realpathSync(p) !== p` 才说明它是 junction；普通目录则是拷贝。`mklink /J` 建 junction 不需要管理员权限，符号链接需要。
+
+工作流：
+
+```
+1. 改完 lib/，跑 publish_gate_link(dir)
+2. link-not-installed        → 建 junction（finding 的 fix 里就是能直接粘的命令）
+3. link-target-missing       → 删掉旧入口，重建 junction
+   link-stale-copy           → 同上；拷贝不会跟着工作区变
+4. patch-entry-top-level     → 把那一行挪进 "- insert:" 块
+5. pnpm-store-conflict       → 别用 pnpm，用 mklink
+```
+
+`profile` 参数可以看别的 profile（默认 `~/.dsh/profiles/desktop`）。测试永远用临时 profile，不碰真的那个。
+
+没有做的：它不替你建链接、不改 profile 的 patch——和门禁其余部分一样只读，每条 finding 都带 `fix` 文案，动手是你的决定。
+
 ## 一个真实的例子
 
 对一个刚从别人那儿接手、准备发布的插件跑 `publish_gate`：
@@ -239,8 +271,8 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 125 个引擎单测
-node test/integration.test.mjs   # 28 条集成断言（9 个真实插件作 fixture）
+node --test                      # 131 个引擎单测
+node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
 ## License

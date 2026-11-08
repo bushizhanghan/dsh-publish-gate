@@ -29,6 +29,7 @@ try {
     'publish_gate_next_version',
     'publish_gate_doctor',
     'publish_gate_commands',
+    'publish_gate_link',
   ]
   results.push([`${expected.length} tools registered`, expected.every((n) => registry.has(n))])
 
@@ -143,6 +144,36 @@ try {
   }
   if (bad) console.error('  ->', bad)
   results.push(['a wrong-typed dir is refused, never thrown', bad === null && pathTools.length > 0])
+
+  // 11. The local-development layer, driven against a temp profile so the real
+  // one is never read or written by a test.
+  const profile = mkdtempSync(join(tmpdir(), 'pg-profile-'))
+  try {
+    mkdirSync(join(profile, 'node_modules'), { recursive: true })
+    writeFile(join(profile, 'node_modules', '.modules.yaml'), JSON.stringify({ storeDir: 'C:\\Users\\x\\AppData\\Local\\pnpm\\store\\v10' }))
+    writeFile(join(profile, 'cordis.patch.yml'), '- id: dsh-page-monitor\n  name: "@bushizhanghan/dsh-page-monitor"\n')
+    const link = await call('publish_gate_link', { dir: sibling('dsh-page-monitor'), profile })
+    results.push([
+      'publish_gate_link answers from a temp profile',
+      link.ok === true && link.link.kind === 'missing' && link.mount.shape === 'top-level' && link.store.conflict === true,
+    ])
+    const linkRules = link.findings.map((f) => f.rule)
+    results.push([
+      'publish_gate_link reports all three local-development failures',
+      ['link-not-installed', 'patch-entry-top-level', 'pnpm-store-conflict'].every((r) => linkRules.includes(r)),
+    ])
+    results.push(['publish_gate_link renders a report', typeof link.report === 'string' && link.report.length > 0])
+    // Negative: an insert row and a matching store major are clean.
+    writeFile(join(profile, 'cordis.patch.yml'), '- insert:\n    - id: dsh-page-monitor\n      name: "@bushizhanghan/dsh-page-monitor"\n')
+    writeFile(join(profile, 'node_modules', '.modules.yaml'), JSON.stringify({ storeDir: 'C:\\Users\\x\\AppData\\Local\\pnpm\\store\\v11' }))
+    const clean = await call('publish_gate_link', { dir: sibling('dsh-page-monitor'), profile })
+    results.push([
+      'publish_gate_link is quiet on a well-formed profile',
+      clean.mount.shape === 'insert' && clean.findings.filter((f) => f.severity === 'error').length === 0,
+    ])
+  } finally {
+    rmSync(profile, { recursive: true, force: true })
+  }
 } catch (error) {
   console.error('UNEXPECTED THROW:', error)
   results.push(['no-throw', false])
