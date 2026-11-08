@@ -46,6 +46,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
 | `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，附带每个插件的真实包体积，看哪个还不能发 |
 | `publish_gate_link` | 本地开发链路：不联网、不调包管理器，只读 profile 自己的 `node_modules` / `.modules.yaml` / `cordis.patch.yml`，回答「宿主现在跑的到底是不是我刚改的这份代码」——链接的形态与目标、pnpm store 的 major、patch 行挂不挂载，一次报全。传 `profile` 可看别的 profile（默认 `~/.dsh/profiles/desktop`） |
+| `publish_gate_update` | **装之前先回答该不该装**。市场里的更新插件都是装完起不来才回滚；这个先把 registry 上那个版本真的下载下来、解包到临时目录，跑同一套产物层与运行时层：入口能不能 import、`apply()` 能不能注册、tarball 里有没有代码、参数传错会不会抛。只在 checkout 里才有意义的规则（git / 市场 / 测试 / 链接）会被过滤掉，结论只关于代码。传 `dir` 或 `name` 都行（只给包名时从已装副本读当前版本） |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
 ## 检查清单
@@ -235,6 +236,39 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 
 没有做的：它不替你建链接、不改 profile 的 patch——和门禁其余部分一样只读，每条 finding 都带 `fix` 文案，动手是你的决定。
 
+## 更新之前：这个新版本装上会不会坏
+
+市场里的更新插件（`dsh-market`、`dsh-update-checker`、`dsh-onekey-update`、`dsh-plugin-auto-update`、`dsh-plugin-steward` …）做得都很好，但它们回答的是**装完之后**的问题：装上了、起不来、回滚。回滚能救回来，代价是这一次更新白做，而且坏的那一下已经发生了。
+
+`publish_gate_update` 把顺序倒过来：**下载 → 解包到临时目录 → 跑门禁的产物层和运行时层 → 再决定要不要装。**
+
+```
+publish_gate_update({ name: "@liustack/modlens" })
+→ current 0.1.0, latest 3.27.3
+→ tarball: 239840 bytes
+→ [warn] client-double-load: ./dsh/client.js 二次求值会重复注册工厂
+```
+
+它跑的是门禁已有的那几层，所以答案是逐条可追的：
+
+- 入口能不能 `import`（`entry-import-failed` / `entry-missing`）
+- `apply()` 能不能注册工具（`tool-none-registered`、`tool-missing-execute`）
+- tarball 里有没有代码（`files-omits-lib`）、补丁在不在（`files-omits-patch`）
+- 参数传错会不会抛（`tool-input-throws`，加 `fuzz: true`）
+- 浏览器半边会不会加载、会不会重复注册（`client-*`）
+
+只在 checkout 里才成立的规则（git / 市场条目 / 测试目录 / 本地链接 / 打包体积）被过滤掉——解包出来的目录没有 `.git`、没有 `README` 契约、没有 `test/`，跑那些只会把真正的结论埋掉。
+
+三条自己的规则：
+
+| 规则 | 严重度 | 说什么 |
+|---|---|---|
+| `candidate-same-version` | info | 已经是最新版，不用下载 |
+| `candidate-older` | warn | registry 的 `latest` **比装着的旧**。unpublish 或误用 `--tag latest` 都会让 dist-tags 往回走，跟过去等于拿旧构建换掉能跑的安装 |
+| `candidate-unavailable` | warn | 没下载成、没解开、没读到版本号。**这不是干净的结论**，detail 里明写 |
+
+它不替你装、不替你更新——和门禁其余部分一样只读。想知道该不该更新，然后自己去 `dsh plugin add`，或者交给已有的更新插件去做。
+
 ## 一个真实的例子
 
 对一个刚从别人那儿接手、准备发布的插件跑 `publish_gate`：
@@ -271,7 +305,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 开发
 
 ```sh
-node --test                      # 131 个引擎单测
+node --test                      # 137 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

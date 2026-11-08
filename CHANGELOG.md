@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.23.0
+
+- New tool `publish_gate_update` (the eleventh): answer "should I take this update?" BEFORE
+  installing it. Every updater in the market rolls back after the new build fails to boot; this
+  downloads the exact tarball the registry would hand an installer, unpacks it into a temp
+  directory and runs the gate's artifact and runtime layers on it — does the entry import, does
+  apply() register, does the tarball carry code, does a tool throw on a wrong-typed argument.
+  Checkout-only rules (git, market, tests, links, pack size) are filtered out, because an
+  extracted tarball has none of those and they would bury the verdict.
+- `candidate-same-version` (info), `candidate-older` (warn: dist-tags.latest can move backwards
+  after an unpublish, and following it swaps a working install for an older build),
+  `candidate-unavailable` (warn, and its detail says this is NOT a clean verdict).
+- Fixed three false positives found by running the gate on 31 real third-party plugins:
+  `files-omits-lib` no longer demands a lib/ from a package whose entry lives elsewhere
+  (@liustack/modlens ships dsh/index.js and has no lib/ at all); `tool-input-throws` no longer
+  reports a deliberate guard that names its own tool — only a raw Node error that leaves the
+  caller with no idea which tool threw; and the client probe now runs ctx.inject(deps, fn)
+  callbacks with a scoped ctx instead of fn() with no argument, so registrations behind an
+  optional service are seen (modlens mounts its whole settings card that way).
+- `client-no-registration` is suppressed when the source clearly reaches a registration through
+  a promise, generator or inject callback the synchronous probe cannot follow.
+
 ## 0.22.0
 
 - New tool `publish_gate_link` (the tenth): the local-development layer. It answers "is the code the
