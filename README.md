@@ -46,6 +46,8 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
 | `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，附带每个插件的真实包体积，看哪个还不能发 |
 | `publish_gate_link` | 本地开发链路：不联网、不调包管理器，只读 profile 自己的 `node_modules` / `.modules.yaml` / `cordis.patch.yml`，回答「宿主现在跑的到底是不是我刚改的这份代码」——链接的形态与目标、pnpm store 的 major、patch 行挂不挂载，一次报全。传 `profile` 可看别的 profile（默认 `~/.dsh/profiles/desktop`） |
+| `publish_gate_smoke` | **装之前最接近真装的一次检查**：把 registry 上那个 tarball 下下来，解到 **profile 自己的 node_modules 里**（所以它的裸 import 会照真实依赖解析，而不是在系统临时目录里报 ERR_MODULE_NOT_FOUND）、import 入口、`apply(ctx)` 一遍，报注册了什么、有没有抛。跑完自己清干净 |
+| `publish_gate_ci` | 生成 `.github/workflows/publish-gate.yml`：CI 能真做的两件事——跑测试、以及校验 tarball 里到底有没有解析出来的入口文件和 `cordis.patch.yml`。**不假装**能在 runner 上跑完整门禁（那里没有 profile、没有宿主、也进不去你的 npm scope） |
 | `publish_gate_update` | **装之前先回答该不该装**。市场里的更新插件都是装完起不来才回滚；这个先把 registry 上那个版本真的下载下来、解包到临时目录，跑同一套产物层与运行时层：入口能不能 import、`apply()` 能不能注册、tarball 里有没有代码、参数传错会不会抛。只在 checkout 里才有意义的规则（git / 市场 / 测试 / 链接）会被过滤掉，结论只关于代码。传 `dir` 或 `name` 都行（只给包名时从已装副本读当前版本） |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
@@ -307,7 +309,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 139 个单测
+node --test                      # 148 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

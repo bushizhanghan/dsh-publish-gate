@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.25.0
+
+Everything the 0.24.0 audit suggested, built. Two new tools, one generated file, one
+regression corpus, and one manifest field that was being asked for in a note instead of
+being shown as JSON.
+
+- **`publish_gate_smoke`** — the strongest pre-install check short of installing. It downloads
+  the exact tarball the registry would hand an installer, unpacks it **inside the profile's own
+  node_modules** so the plugin's bare imports resolve against what is really installed, imports
+  the entry and runs `apply(ctx)`. `publish_gate_update` does the same work in a system temp
+  directory, where a plugin with a normal dependency fails with ERR_MODULE_NOT_FOUND and looks
+  broken. Verified against a real published plugin: 0.8 s, five tools registered, temp dir gone.
+- **`publish_gate_ci`** — emits `.github/workflows/publish-gate.yml`. It keeps only the two
+  checks a runner can honestly make: `node --test`, and "is the resolved entry file (plus the
+  declared `cordis.patch.yml`) inside the tarball npm would publish". It does not pretend to run
+  the full gate — a runner has no profile, no host to import into, and no access to your scope.
+- **`format: "markdown"`** on `publish_gate` and `publish_gate_doctor` — the same findings as a
+  table you can paste into an issue or a PR comment. `renderMarkdown()` is a twin of
+  `renderReport()`, not a second implementation of the checks.
+- **Regression corpus** (`test/corpus.test.mjs`) — one fixture per real plugin shape that the gate
+  used to call broken: `@liustack/modlens` (entry in `dsh/`), `@michengai/dsh-codex-ui` (object
+  `exports["./client"]`), `@tt-a1i/archify-dsh` (patch-only library), the multi-line
+  `export { apply, inject }` form, `dsh-workbuddy`'s TypeScript specs, and an org scope. Every case
+  names the package it came from, so a future rule change that reintroduces the false positive
+  fails here instead of on someone else's plugin.
+- **`publish_gate_commands` now returns `manifestFix`** for a scoped package without
+  `publishConfig.access`: the exact JSON to merge into package.json, instead of a sentence telling
+  you to write it. This package now declares it too, which is why its own gate is silent.
+- Tests: 147 (was 139).
+
 ## 0.24.0
 
 One full audit pass over the gate itself: read-only reviews of both source files plus a sweep
