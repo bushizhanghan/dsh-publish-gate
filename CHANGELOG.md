@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.24.0
+
+One full audit pass over the gate itself: read-only reviews of both source files plus a sweep
+against 27 real third-party plugins already installed in this profile. Everything below is a
+defect the gate had, not a feature it lacked.
+
+Fixed — the gate was wrong on real packages:
+
+- `pack-omits-lib` judged "does the tarball carry code" by looking for `lib/`, so every package
+  whose entry is `dsh/index.js`, `index.mjs` or `dist/` (`@liustack/modlens`, `@liustack/pptwise`,
+  `@feng0531/dsh-code-review`) was reported as shipping nothing. It now resolves the entry with
+  `entryFile()` and asks whether *that* file made it into the tarball.
+- `pack-omits-client` only understood the string form of `exports["./client"]`; the object form
+  (`{ types, default }`) is the common one, so four of five packages with a panel were never checked.
+- `clientTarget` returned the raw object, so `String(...)` produced `[object Object]` and the whole
+  client layer silently skipped. It now picks the string out recursively.
+- `checkEntrySource`, `checkInjectCoverage` and `publish_gate_doctor` all assumed `lib/index.js`.
+- `hand-edited-build` deleted: a normal build reads `src` then writes `lib`, so the rule fired after
+  every healthy build. A rule that cannot tell those apart trains people to ignore it.
+- `publish-served` claimed "matches" when either shasum was missing. Missing evidence is now
+  `publish-served-unverified` (warn).
+- `license-mismatch` looked for the SPDX id as a literal in the LICENSE body, so Apache-2.0,
+  BSD-3-Clause and MPL-2.0 were always reported and only MIT passed by luck. It now probes each
+  licence for its actual wording.
+- `version-behind-latest` flagged legitimate backports published under `--tag legacy` as errors.
+- `market-duplicate-entry` compared URLs by substring, so `me/pkg` matched `me/pkg-extra`.
+- `checkMarketEntry` threw `text.trim is not a function` for any non-string.
+- `insert-missing-name` demanded `name:` on the very next line; `patch` treated a column-0 comment
+  as the end of the `- insert:` block, so later rows were read as top-level overrides.
+- `no-test-files` was not recursive and ignored `.spec.ts` (dsh-workbuddy's whole `tests/` directory).
+- `test-script-dir-arg` fired on `node --test test/engine.test.mjs`, a legal single file.
+- `npm-scope-mismatch` compared `npm whoami` (a user) against the scope (an org) — downgraded to info.
+- `inject-missing-*` matched string literals, so prose about `ctx.webServer` counted as a use.
+- A patch-only package that mounts someone else's service and never itself
+  (`@tt-a1i/archify-dsh` inserts `dsh-skill-filesystem`) was told it forgot `export function apply`.
+  New `mountsSelf()` ends that: a library owes the host nothing.
+- `checkVersionTaken` lost its `dir` parameter in one edit and the resulting ReferenceError was
+  swallowed by the function's own `catch {}` — the rule went silent instead of failing loudly.
+- Duplicate rules collapsed: `files-omits-lib` / `files-omits-patch` became info because the
+  artifact layer already reports the same gap as an error.
+
+Fixed — the tools lied to callers:
+
+- Every `skip*` flag was read for truthiness, so `skipPack: "false"` skipped the checks and returned
+  `safeToPublish: true`. All of them are now `=== true`.
+- `publish_gate_tools` accepted `skip: "name"` as a string, dropped it to `[]`, and then fuzzed every
+  tool including the ones that open applications. Non-array is now refused.
+- `publish_gate_market` passed unvalidated `text` straight into the parser.
+- `publish_gate_verify` with a non-string `version` reported "not published" instead of refusing.
+- Tool timeouts are declared as 120 s, which is the host's own ceiling; the previous 240 s was a
+  promise nothing could keep.
+- Dead `staticGate`, dead `SCOPED`, and `cfg.testTimeoutMs` (undefined at every call) are gone.
+
 ## 0.23.0
 
 - New tool `publish_gate_update` (the eleventh): answer "should I take this update?" BEFORE

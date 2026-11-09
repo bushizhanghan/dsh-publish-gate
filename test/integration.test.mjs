@@ -45,7 +45,7 @@ try {
   const broken = mkdtempSync(join(tmpdir(), 'gate-broken-'))
   try {
     mkdirSync(join(broken, 'lib'), { recursive: true })
-    writeFileSync(join(broken, 'package.json'), '\uFEFF' + JSON.stringify({ name: 'x', version: '1.0.0' }))
+    writeFileSync(join(broken, 'package.json'), '\uFEFF' + JSON.stringify({ name: 'x', version: '1.0.0', type: 'module', dsh: { bundle: { patch: 'cordis.patch.yml' } } }))
     writeFileSync(join(broken, 'cordis.patch.yml'), '- id: x\n  name: "x"\n')
     writeFileSync(join(broken, 'lib', 'index.js'), "const fs = require('node:fs')\nexport const name = 'x'\n")
     const bad = await call('publish_gate', { dir: broken, skipNetwork: true })

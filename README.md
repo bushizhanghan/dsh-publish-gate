@@ -186,9 +186,10 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | 规则 | 抓什么 |
 |---|---|
 | `stale-build` | `src/` 比 `lib/` 新：构建没跑就发布了，tarball 里是上一次的产物 |
-| `hand-edited-build` | `lib/` 比 `src/` 新：有人直接改了构建产物。下一次干净的构建会**静默丢掉**这些改动，所以发布的字节没法从 `src/` 复现出来 |
 
-两条都只是 warn：有可能你就是要发手改的产物（我干过）。但发之前你得知道自己在发什么。
+只是 warn：有可能你就是要发手改的产物（我干过）。但发之前你得知道自己在发什么。
+
+> 早先还有一条 `hand-edited-build`（`lib/` 比 `src/` 新就报），**已删除**：正常构建本来就是先读 `src` 再写 `lib`，所以它在我自己每一个健康构建之后都会响一次。如果一条规则分不清「健康构建」和「手改产物」，它只是在教人忽略告警。
 
 ### 可追溯性：一周后你还能指出线上那包是哪份代码吗
 
@@ -298,6 +299,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 - **`--ignore-scripts`**：dry run 不跑 `prepack`，否则检查会触发一次构建。代价是清单可能和真实产物不同，所以有 `pack-script-build` 把这件事说出来。
 - **发完那几十秒不算失败**：npm 收下包会先回 202，然后六十秒到几分钟里这个版本在 registry 上根本不存在。这个插件自己的 0.8.1 实测是**四分钟**才出现。所以 `publish_gate_verify` 加了 `waitMs` 轮询；一轮等不到就返回 `pending: true`——那是「还没轮到」，不是「没发成功」。单次最多等 90 秒，因为宿主 120 秒就掐掉工具调用，剩下的只能再跑一次。
 - **`publish_gate_verify` 比 shasum，不比版本号**：版本号相同而字节不同（发了又改、或本地根本没发）是最常见的自欺。`npm pack --dry-run` 的 shasum 和 registry 的 `dist.shasum` 是同一套算法，所以这个比较是精确的。
+  两侧 shasum 只要缺一个就**不下结论**，改报 `publish-served-unverified`（warn）——「没证明」和「证明相符」是两件事，以前的版本会把它读成 match。
 - **只读**：修不修由你定，每条 finding 都带 `fix` 文案。门禁的职责是把话说清楚，不是替你做决定——所以没有 `--fix`。
 - **确定性**：全部规则是文件内容、子进程或 registry/GitHub API 检查，没有 LLM 调用——一条规则答错，你可以直接看规则。
 - **自举**：这个插件的测试把九个已发布插件当 fixture，断言它们在门禁下零 blocker；规则如果有任何误报倾向，测试先炸。
@@ -305,7 +307,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 137 个单测
+node --test                      # 139 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

@@ -116,12 +116,15 @@ test('a UTF-8 BOM is an error and never a JSON parse mystery', () => {
   }
 })
 
-test('files omitting lib is an error — the empty-tarball publish', () => {
+test('files omitting lib is flagged statically and blocked by the tarball check', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-files-'))
   try {
     goodPlugin(dir, { files: ['README.md'] })
-    const findings = checkPackageJson(dir)
-    assert.ok(findings.some((f) => f.rule === 'files-omits-lib' && f.severity === 'error'))
+    const hit = checkPackageJson(dir).find((f) => f.rule === 'files-omits-lib')
+    assert.ok(hit, 'the static layer names the missing directory')
+    // Only the packed tarball proves the code is gone; the static layer is the
+    // suspicion that sends you there, so it must not double-report an error.
+    assert.equal(hit.severity, 'info')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -676,13 +679,15 @@ test('lib hygiene: console.log warns, debugger errors, a machine path warns', ()
   }
 })
 
-test('using ctx.tools without injecting "tools" is an error', () => {
+test('using ctx.tools without injecting "tools" is a warning', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-inject-'))
   try {
     pluginWithEntry(dir, `export const name = 'good'\nexport const inject = []\nexport function apply(ctx) { ctx.tools.register({}) }\n`)
     const f = checkInjectCoverage(dir).find((x) => x.rule === 'inject-missing-tools')
     assert.ok(f)
-    assert.equal(f.severity, 'error')
+    // A missed inject is a real risk but not a certain break: another plugin can
+    // pull the service in first, so it stays a warning.
+    assert.equal(f.severity, 'warn')
 
     // ctx.webServer must not be mistaken for ctx.web
     pluginWithEntry(dir, `export const name = 'good'\nexport const inject = ['webServer']\nexport function apply(ctx) { ctx.webServer.register({}) }\n`)
@@ -1073,7 +1078,7 @@ test('market readiness: a package with no GitHub repository cannot be listed', a
     rmSync(dir, { recursive: true, force: true })
   }
 })
-test('build freshness: stale lib/ and hand-edited lib/ are different problems', () => {
+test('build freshness: stale lib/ is reported and a fresh build is not', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-build-'))
   try {
     goodPlugin(dir)
@@ -1085,10 +1090,11 @@ test('build freshness: stale lib/ and hand-edited lib/ are different problems', 
     utimesSync(join(dir, 'lib', 'index.js'), new Date('2020-01-01'), new Date('2020-01-01'))
     assert.deepEqual(checkBuildFreshness(dir).map((f) => f.rule), ['stale-build'])
 
-    // lib/ newer than src/ -> someone hand-edited the build output.
+    // lib/ newer than src/ is what a normal build produces — the rule that used
+    // to call it a hand edit fired on every healthy package and is gone.
     utimesSync(join(dir, 'src', 'index.ts'), new Date('2020-01-01'), new Date('2020-01-01'))
     utimesSync(join(dir, 'lib', 'index.js'), new Date(), new Date())
-    assert.deepEqual(checkBuildFreshness(dir).map((f) => f.rule), ['hand-edited-build'])
+    assert.deepEqual(checkBuildFreshness(dir), [])
 
     // No src/ at all (plain JS plugin) -> nothing to compare.
     rmSync(join(dir, 'src'), { recursive: true, force: true })
@@ -1458,7 +1464,8 @@ test('npm-scope-mismatch: publishing under a scope you are not logged in as', as
     goodPlugin(dir)
     const mismatch = await checkPublishIdentity(dir, { whoami: 'someone-else' })
     assert.deepEqual(mismatch.map((f) => f.rule), ['npm-scope-mismatch'])
-    assert.equal(mismatch[0].severity, 'warn')
+    // npm whoami returns the USER, never an org, so the org-scoped case is normal.
+    assert.equal(mismatch[0].severity, 'info')
     assert.match(mismatch[0].title, /@bushizhanghan/)
 
     const ok = await checkPublishIdentity(dir, { whoami: 'bushizhanghan' })
@@ -2378,6 +2385,61 @@ test('a missing @deepseek-ai peer is a warn, not a load failure', async () => {
     const { findings } = await checkToolRegistrations(dir)
     assert.deepEqual(findings.map((f) => f.rule), ['entry-import-unresolved'])
     assert.equal(findings[0].severity, 'warn')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a patch-only package is not asked to export apply', () => {
+  const build = (mountName) => {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-patchonly-'))
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@tt-a1i/archify-dsh',
+        version: '1.0.0',
+        type: 'module',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }),
+    )
+    writeFileSync(join(dir, 'cordis.patch.yml'), `- insert:\n    - id: x\n      name: "${mountName}"\n`)
+    writeFileSync(join(dir, 'lib', 'index.js'), "export const name = 'archify-dsh'\n")
+    return dir
+  }
+
+  // It only inserts someone else's service, so its own entry is a helper
+  // library. @tt-a1i/archify-dsh shipped exactly this shape.
+  const foreign = build('@deepseek-ai/dsh-skill-filesystem')
+  try {
+    const rules = checkEntrySource(foreign).map((f) => f.rule)
+    assert.ok(!rules.includes('no-apply-export'), 'a patch-only package owes no apply export')
+    assert.ok(!rules.includes('no-inject'))
+  } finally {
+    rmSync(foreign, { recursive: true, force: true })
+  }
+
+  // A package that mounts itself is a real plugin and still gets checked.
+  const self = build('@tt-a1i/archify-dsh')
+  try {
+    const rules = checkEntrySource(self).map((f) => f.rule)
+    assert.ok(rules.includes('no-apply-export'))
+  } finally {
+    rmSync(self, { recursive: true, force: true })
+  }
+})
+
+test('no-test-files accepts TypeScript specs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-tsspec-'))
+  try {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', type: 'module' }))
+    writeFileSync(join(dir, 'tests', 'auth.spec.ts'), 'export const x = 1\n')
+    assert.ok(!checkTests(dir).some((f) => f.rule === 'no-test-files'))
+
+    writeFileSync(join(dir, 'tests', 'auth.ts'), 'export const x = 1\n')
+    rmSync(join(dir, 'tests', 'auth.spec.ts'))
+    assert.ok(checkTests(dir).some((f) => f.rule === 'no-test-files'), 'a plain .ts helper is not a test')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
