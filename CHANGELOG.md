@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.25.1
+
+An independent review of 0.25.0 found six real defects. All fixed; no rule was added.
+
+- **`publish_gate_smoke` said `ok: true` after verifying nothing.** Every download, extraction
+  or unsafe-tarball failure becomes a `candidate-unavailable` warning, so "no errors" was true on
+  an empty result — a 404 from the registry looked like a pass. `ok` now also requires that
+  something was actually unpacked, and the result carries `verified`. `publish_gate_update` had
+  the same hole and got the same treatment.
+- **The generated CI started with `npm ci`**, which exits 1 unless the repository carries a
+  lockfile — this repository and all nine siblings do not. It now runs `npm install --ignore-scripts`.
+- **The generated CI's `node --test` was red on a fresh clone**, because this package's own
+  integration suite points the gate at sibling plugin checkouts that only exist on the author's
+  machine. That suite now skips with a clear message instead of failing.
+- **A tarball link was still a way out of the extraction directory.** `tar -tzf` lists names but
+  not link targets; a second pass with `tar -tvzf` refuses any member whose type flag is `l` or
+  `h`. npm tarballs never carry links.
+- **No size limit on a downloaded tarball.** Now capped at 64 MB (`maxBytes`), because a registry
+  is not a trusted place and an unbounded read is a memory bomb on the checker's machine.
+- **`unsafeTarEntry` refused legal filenames.** It tested `p.includes('..')`, so `a..b.js` was
+  rejected; it now only refuses a whole `..` path segment.
+- **Metadata fields were errors in the docs and warnings in the code.**
+  `description`/`license`/`repository`/`author` stay warnings (19 of 29 real plugins are
+  missing at least one and load fine), and the README table now says so.
+- **`publish_gate_doctor` skipped every plugin whose entry was not under `lib/`** — it used a
+  hardcoded path while the rest of the gate resolves `exports['.']`/`main`. It now uses
+  `entryFile()`.
+- **`profile` in the smoke tool was an unvalidated path segment**, so `../../..` could point the
+  unpack outside `~/.dsh/profiles`. Now restricted to `[\w.-]+`.
+- CI's entry probe now resolves nested conditional exports the same way `entryFile()` does, so
+  `exports['.'] = { default: { import: … } }` no longer reads as `[object Object]`.
+
 ## 0.25.0
 
 Everything the 0.24.0 audit suggested, built. Two new tools, one generated file, one

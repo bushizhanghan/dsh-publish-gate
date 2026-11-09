@@ -2,7 +2,7 @@
 // against the real published plugins.
 import { apply } from '../lib/index.js'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, writeFileSync as writeFile, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync as writeFile, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,6 +10,15 @@ import { join } from 'node:path'
 const HERE = fileURLToPath(new URL('.', import.meta.url)).replace(/\\/g, '/')
 const WORKSPACE = HERE.replace(/\/dsh-publish-gate\/test\/?$/, '')
 const sibling = (name) => `${WORKSPACE}/${name}`
+
+// These cases run the gate against real, already-published plugins that live
+// next to this checkout. On a fresh clone they do not exist, and reporting a
+// failure there would blame the code for the environment.
+const SIBLINGS_PRESENT = existsSync(sibling('dsh-page-monitor'))
+if (!SIBLINGS_PRESENT) {
+  console.log('integration: skipped - needs sibling plugin checkouts under ' + WORKSPACE)
+  process.exit(0)
+}
 
 const registry = new Map()
 const fakeCtx = { tools: { register: (t) => registry.set(t.name, t) } }

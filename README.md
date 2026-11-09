@@ -54,11 +54,13 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ## 检查清单
 
 ### 会真的挡住发布的（error）
+
+> 缺 `description` / `license` / `repository` / `author` 只给 warn：它们不影响安装和加载，只是出事时没人可找。0.25.1 之前这四个也报 error，29 个真实插件里 19 个因此被判「不能发」——那是把元数据当成了缺陷。
 | 规则 | 抓什么 |
 |---|---|
 | `utf8-bom` | BOM 让 JSON.parse 抛「Unexpected token」，错误信息里没有 BOM 三个字 |
 | `json-parse` | package.json 语法错误 |
-| `missing-field` | name/version/description/main/license/repository/author 缺失 |
+| `missing-field` | `name` / `version` / `main` / `type` 缺失——这四项决定消费者能不能加载它 |
 | `invalid-name` / `invalid-version` | npm 拒绝的形状 |
 | `files-omits-lib` | 发出去是空包——**npm 不警告** |
 | `files-omits-patch` | `dsh.bundle.patch` 指的文件不在 files 里，装上不挂载 |
@@ -309,7 +311,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 148 个单测
+node --test                      # 149 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

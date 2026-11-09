@@ -18,6 +18,7 @@ import {
   mountsSelf,
   renderMarkdown,
   unsafeTarEntry,
+  unsafeTarLink,
   runStaticChecks,
 } from '../lib/engine.js'
 
@@ -201,4 +202,14 @@ test('a tarball that can escape the extraction directory is refused', () => {
   assert.match(String(unsafeTarEntry('C:/Windows/System32/x.dll')), /System32/)
   assert.equal(unsafeTarEntry(''), null)
   assert.equal(unsafeTarEntry(undefined), null)
+})
+
+test('a tarball with a symlink member is refused, a dotted filename is not', () => {
+  assert.equal(unsafeTarEntry('package/a..b.js'), null, 'a..b.js is a legal name')
+  assert.ok(unsafeTarEntry('package/../out.js'))
+  assert.equal(
+    unsafeTarLink('-rw-r--r--  0 0 0  12 Jun  1 00:00 package/a.js\nlrwxrwxrwx  0 0 0   6 Jun  1 00:00 package/link -> ../x'),
+    'lrwxrwxrwx  0 0 0   6 Jun  1 00:00 package/link -> ../x',
+  )
+  assert.equal(unsafeTarLink('-rw-r--r--  0 0 0  12 Jun  1 00:00 package/a.js'), null)
 })

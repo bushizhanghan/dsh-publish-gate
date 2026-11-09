@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, utimesSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
@@ -352,9 +352,17 @@ const MY_PLUGINS = [
   'dsh-routing-forensics',
   'dsh-workspace-switch-cost',
 ].map((n) => `${WORKSPACE}/${n}`)
+// On a fresh clone these directories do not exist; a test that walks them has
+// nothing to say and must skip rather than report the machine as broken.
+const MY_PLUGINS_PRESENT = () => MY_PLUGINS.filter((dir) => existsSync(join(dir, 'package.json')))
 
-test('the four published plugins pass the static gate (no blockers)', () => {
-  for (const dir of MY_PLUGINS) {
+test('the four published plugins pass the static gate (no blockers)', (ctx) => {
+  const dirs = MY_PLUGINS_PRESENT()
+  if (dirs.length === 0) {
+    ctx.skip('needs sibling plugin checkouts next to this repository')
+    return
+  }
+  for (const dir of dirs) {
     const findings = runStaticChecks(dir)
     const errors = findings.filter((f) => f.severity === 'error')
     assert.deepEqual(
@@ -365,8 +373,13 @@ test('the four published plugins pass the static gate (no blockers)', () => {
   }
 })
 
-test('the four published plugins have no patch or entry-structure findings', () => {
-  for (const dir of MY_PLUGINS) {
+test('the four published plugins have no patch or entry-structure findings', (ctx) => {
+  const dirs = MY_PLUGINS_PRESENT()
+  if (dirs.length === 0) {
+    ctx.skip('needs sibling plugin checkouts')
+    return
+  }
+  for (const dir of dirs) {
     const rules = runStaticChecks(dir).map((f) => f.rule)
     for (const forbidden of ['insert-wrong-indent', 'insert-missing-name', 'insert-name-mismatch', 'no-insert-row', 'patch-not-mount', 'no-name-export', 'no-apply-export', 'require-in-esm', 'utf8-bom']) {
       assert.ok(!rules.includes(forbidden), `${dir}: ${forbidden}`)
@@ -770,8 +783,13 @@ test('runArtifactChecks composes pack + runtime + readme, and can skip each half
   }
 })
 
-test('every plugin in this workspace is artifact-clean', async () => {
-  for (const dir of MY_PLUGINS) {
+test('every plugin in this workspace is artifact-clean', async (ctx) => {
+  const present = MY_PLUGINS.filter((dir) => existsSync(join(dir, 'package.json')))
+  if (present.length === 0) {
+    ctx.skip('needs sibling plugin checkouts next to this repository')
+    return
+  }
+  for (const dir of present) {
     const { findings } = await runArtifactChecks(dir)
     const errors = findings.filter((f) => f.severity === 'error')
     assert.deepEqual(errors.map((f) => `${f.rule}: ${f.title}`), [], `${dir} still has blockers`)
