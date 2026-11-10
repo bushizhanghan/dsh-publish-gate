@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.27.0
+
+A workspace root is not a flat list of directories, and the sweep used to treat it as one.
+
+- **`publish_gate_doctor` now reads the workspace manifest.** `pnpm-workspace.yaml` (`packages:`) and
+  `package.json` (`workspaces`, array or `{packages}`) are expanded one level, so a monorepo that
+  keeps its plugins under `packages/*` or `plugins/*` no longer reports "no plugin checkout found".
+  Direct children are still scanned, and a root with nothing at all now says so instead of
+  returning an empty success.
+- Quoted globs (`- 'packages/*'`) are unwrapped; a stray quote used to send the expansion at a
+  directory literally named `'packages`.
+- `**` patterns are skipped rather than half-expanded, because a guess there would silently miss
+  packages.
+
 ## 0.26.1
 
 Three places where "could not check" was printed as "nothing to report". All three are the same

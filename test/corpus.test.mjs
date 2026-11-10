@@ -8,6 +8,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { apply } from '../lib/index.js'
+
 import {
   buildGateWorkflow,
   applyFixes,
@@ -277,5 +279,43 @@ test('corpus: a plugin inside a monorepo sees its own dirty files', async () => 
     )
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the doctor finds plugins kept one level down in a workspace', async () => {
+  const make = (manifest, holder) => {
+    const root = mkdtempSync(join(tmpdir(), 'pg-ws-'))
+    writeFileSync(join(root, manifest.name), manifest.body)
+    const dir = join(root, holder, 'one')
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@me/one',
+        version: '1.0.0',
+        type: 'module',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+        files: ['lib', 'cordis.patch.yml'],
+      }),
+    )
+    writeFileSync(join(dir, 'cordis.patch.yml'), "- insert:\n    - id: one\n      name: '@me/one'\n")
+    writeFileSync(join(dir, 'lib', 'index.js'), "export const name = 'one'\nexport const inject = []\nexport function apply() {}\n")
+    return root
+  }
+  const tools = new Map()
+  apply({ tools: { register: (t) => tools.set(t.name, t) } }, {})
+  const doctor = tools.get('publish_gate_doctor')
+  for (const [manifest, holder] of [
+    [{ name: 'pnpm-workspace.yaml', body: "packages:\n  - 'packages/*'\n" }, 'packages'],
+    [{ name: 'package.json', body: JSON.stringify({ private: true, workspaces: ['plugins/*'] }) }, 'plugins'],
+  ]) {
+    const root = make(manifest, holder)
+    try {
+      const res = await doctor.execute({ root, skipPack: true })
+      assert.equal(res.ok, true, 'the sweep has to find the workspace glob, not just direct children')
+      assert.deepEqual(res.plugins.map((x) => x.name), ['@me/one'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   }
 })

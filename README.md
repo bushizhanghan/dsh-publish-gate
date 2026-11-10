@@ -64,7 +64,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_patch` | 只查 `cordis.patch.yml`——「插件装了但工具没出现」的第一个怀疑对象 |
 | `publish_gate_market` | 校验市场条目 YAML（url/name/category/description 双语）；传 `dir` 则改查只有线上才能回答的三件事：这个仓库**已经在目录里**（再开 PR 就是重复条目）、另一个条目也在发同一个 npm 包、仓库还**不满 24 小时**（提交门禁会失败并自己重跑） |
 | `publish_gate_next_version` | 当前版本、是否已被 registry 占用、建议 bump 到多少（本地比 npm 旧时从 npm 的 latest 往上加，不会推荐一个已被占用的版本） |
-| `publish_gate_doctor` | 扫整个目录，按 blocker 数排序，附带每个插件的真实包体积，看哪个还不能发 |
+| `publish_gate_doctor` | 一次扫一个目录下的所有插件并按 blocker 排序（离线，不查 registry/GitHub），每行带真实打包体积 | 也认 pnpm/npm workspace：`pnpm-workspace.yaml` 的 `packages:` 与 `package.json` 的 `workspaces`，所以 monorepo 里的 `packages/*`、`plugins/*` 不会被当成空目录 |
 | `publish_gate_link` | 本地开发链路：不联网、不调包管理器，只读 profile 自己的 `node_modules` / `.modules.yaml` / `cordis.patch.yml`，回答「宿主现在跑的到底是不是我刚改的这份代码」——链接的形态与目标、pnpm store 的 major、patch 行挂不挂载，一次报全。传 `profile` 可看别的 profile（默认 `~/.dsh/profiles/desktop`） |
 | `publish_gate_smoke` | **装之前最接近真装的一次检查**：把 registry 上那个 tarball 下下来，解到 **profile 自己的 node_modules 里**（所以它的裸 import 会照真实依赖解析，而不是在系统临时目录里报 ERR_MODULE_NOT_FOUND）、import 入口、`apply(ctx)` 一遍，报注册了什么、有没有抛。跑完自己清干净 |
 | `publish_gate_ci` | 生成 `.github/workflows/publish-gate.yml`：CI 能真做的两件事——跑测试、以及校验 tarball 里到底有没有解析出来的入口文件和 `cordis.patch.yml`。**不假装**能在 runner 上跑完整门禁（那里没有 profile、没有宿主、也进不去你的 npm scope） |
@@ -334,7 +334,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 153 个单测
+node --test                      # 154 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
