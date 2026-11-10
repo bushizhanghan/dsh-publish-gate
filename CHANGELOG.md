@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.37.0
+
+Two places where the chain said something it had not checked.
+
+- The `check` step ran `runStaticChecks` only — package.json and patch shape. A package whose
+  tarball ships no entry file, or whose tools throw on registration, came back as "the gate has no
+  errors". It now runs the artifact layer too (pack contents, tool registration, client probe), which
+  is the same set `publish_gate` reports, so the two cannot disagree. Measured 3.6 s on this plugin.
+- Creating a repository ignored the owner in `owner/name`: `/user/repos` always creates under the
+  authenticated account, so `someorg/pkg` landed in the wrong place and the push that followed 404'd.
+  It now asks `/user` and uses `/orgs/{owner}/repos` when the owner is somebody else.
 ## 0.36.1
 
 - The market step is idempotent: it asks the catalogue for

@@ -54,6 +54,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
 
+`check` 这一步跑的就是完整门禁（静态 + 打包 + 运行时三层），所以这里的「没有 error」和 `publish_gate` 说的是同一件事——不是只看了 package.json 就说干净。实测 3.6 秒。
+
 哪一步失败就停在那一页，把真实原因抄给你；修完重跑会接着往下走（`steps` 传子集即可）。结果里 `published` 只在 npm 真的跑过并返回 0 时为 true，`planned` 列出被跳过的那几步。
 
 缺东西时它不是甩一句报错，而是给出**要问用户什么**：

@@ -291,3 +291,19 @@ test('entryExists tells listed from not listed, and says when it cannot tell', a
   assert.equal(blocked.ok, false, 'a 500 is not "not listed"')
   assert.match(blocked.why, /could not read the catalogue/)
 })
+
+test('a slug in an organisation is created there, not in the account', async () => {
+  const calls = []
+  const transport = (path, init) => {
+    calls.push((init.method || 'GET') + ' ' + path)
+    if (path === '/user') return Promise.resolve({ ok: true, status: 200, data: { login: 'me' } })
+    if (path.startsWith('/repos/')) return Promise.resolve({ ok: false, status: 404, why: 'HTTP 404' })
+    return Promise.resolve({ ok: true, status: 201, data: { full_name: path.includes('/orgs/') ? 'someorg/pkg' : 'me/pkg' } })
+  }
+  const inOrg = await ensureRepo('t', 'someorg/pkg', { transport })
+  assert.equal(inOrg.ok, true)
+  assert.ok(calls.includes('POST /orgs/someorg/repos'), 'an org slug goes to the org endpoint')
+  calls.length = 0
+  await ensureRepo('t', 'me/pkg', { transport })
+  assert.ok(calls.includes('POST /user/repos'), 'a personal slug still goes to /user/repos')
+})
