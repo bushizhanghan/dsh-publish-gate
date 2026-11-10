@@ -52,6 +52,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 默认跑全部六步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
 
+`npm` 那一步不只认 `npm publish` 的退出码：发完它会拿本地 tarball 的 shasum 去轮询 registry，直到确定「线上就是这份字节」才罢休（默认最多等 45 秒，可用 `waitMs` 调到 60 秒上限）。等不到不算失败，返回里 `verified: false` 并提示你跑 `publish_gate_verify` 复核。
+
 带了 `confirm: true` 且 `package.json` 里没有 `repository` 时，`repo` 这一步会顺手把仓库地址写进去：没有这一行，npm 上的包没有源码链接，之后每次 `status` 也只会回答「还没上 GitHub」。只在仓库这一步真要执行时才写，纯预览不会动你的文件。
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。

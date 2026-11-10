@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.43.0
+
+- `ship` 的 npm 步不再只看退出码：发完立刻用本地 tarball 的 shasum 去轮询 registry，确认线上就是这份字节才报 `verified: true`；等不到就报 `verified: false` 并让你跑 `publish_gate_verify`。这个插件自己每发一版都要手动轮询 35–250 秒，全链路一直缺最后一公里。
+- 新增 `waitMs` 参数（默认 45000，上限 60000，因为单次工具调用只有 120 秒）。
+- 单测 188 个，集成断言 40 条。
+
 ## 0.42.0
 
 - `ship` 的 repo 步现在会把 `repository` 写进 package.json（仅当这次真的要建仓库/推代码，即 `confirm: true`）。没有它，npm 上没有源码链接，`publish_gate_status` 会永远回答「还没上 GitHub」——这条是本机真跑 `ship` 时发现的，之前所有发布都是我手写脚本补的。

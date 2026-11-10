@@ -176,7 +176,8 @@ try {
       try {
         const r = await tool.execute({ dir: value }, { signal: undefined })
         if (!r || typeof r !== 'object' || r.ok !== false) bad = `${tool.name} accepted dir=${JSON.stringify(value)}`
-      } catch (error) {
+
+} catch (error) {
         bad = `${tool.name} threw on dir=${JSON.stringify(value)}: ${error && error.message}`
       }
       if (bad) break
@@ -273,6 +274,27 @@ try {
 } catch (error) {
   console.error('UNEXPECTED THROW:', error)
   results.push(['no-throw', false])
+}
+
+
+// The npm step used to stop at "npm publish returned 0". Exiting 0 is not the
+// same claim as "the registry serves these bytes", so the step now polls the
+// registry and says which one it proved.
+try {
+  const shipTool = registry.get('publish_gate_ship')
+  const shipParams = shipTool.parameters.properties
+  results.push([
+    'ship declares the registry wait and reports whether it proved the bytes',
+    typeof shipParams.waitMs === 'object' && typeof shipParams.skipPack === 'object',
+  ])
+  const noToken = await shipTool.execute({ dir: HERE.replace(/\/test\/?$/, ''), steps: ['npm'], confirm: true }, { signal: undefined })
+  results.push([
+    'ship without an npm token asks for one instead of publishing',
+    noToken.ok === false && (noToken.needs || []).some((n) => n.key === 'npmToken') && noToken.verified === false,
+  ])
+} catch (error) {
+  console.error('UNEXPECTED THROW (ship):', error)
+  results.push(['ship: no-throw', false])
 }
 
 let pass = 0
