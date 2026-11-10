@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.34.0
+
+Every release of this plugin (and the nine around it) opened with the same hand-written script:
+bump `package.json`, splice a heading into `CHANGELOG.md`. Those scripts are where CRLF turned
+into LF, where a section got duplicated, and where a heading landed three blank lines away from the
+previous one. `publish_gate_release` does that part, and shows the plan first.
+
+- `bump` (patch/minor/major) or an explicit `version`; refuses anything not newer than the current
+  one, because "release 1.0.0" on a 1.2.3 package is a typo, not an intention.
+- Writes `CHANGELOG.md` in whatever line ending the file already used, collapses a naive splice's
+  three blank lines, and does nothing when the section already exists.
+- `apply` defaults to false. It does not write prose for you, does not tag, and does not publish.
+
 ## 0.33.0
 
 A plugin does not fail loudly when its mount id is already taken. The host inserts both rows,

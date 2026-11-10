@@ -42,6 +42,7 @@ try {
     'publish_gate_ci',
     'publish_gate_update',
     'publish_gate_drift',
+    'publish_gate_release',
     'publish_gate_fix',
     'publish_gate_link',
   ]

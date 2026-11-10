@@ -25,6 +25,9 @@ import {
   checkPackageJson,
   checkMountIdCollision,
   mountIds,
+  applyRelease,
+  bumpVersion,
+  planRelease,
   checkPack,
   diffPack,
   checkPatchYml,
@@ -2689,5 +2692,40 @@ test('two packages inserting the same mount id is an error, patch rows are not',
   // the same package appears twice in a profile all the time; that is not a collision
   assert.deepEqual(checkMountIdCollision(dir, { installed: [{ id: 'chat-ui', name: '@me/chat-ui' }] }), [])
   assert.deepEqual(checkMountIdCollision(dir, { installed: [{ id: 'other', name: '@other/plugin' }] }), [])
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('planRelease bumps and refuses, applyRelease writes without losing CRLF', () => {
+  assert.equal(bumpVersion('1.2.3', 'patch'), '1.2.4')
+  assert.equal(bumpVersion('1.2.3', 'minor'), '1.3.0')
+  assert.equal(bumpVersion('1.2.3', 'major'), '2.0.0')
+  assert.equal(bumpVersion('1.2', 'patch'), null, 'not a three-part version')
+
+  const dir = mkdtempSync(join(tmpdir(), 'pg-release-'))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@me/x', version: '1.2.3', type: 'module' }, null, 2) + '\n')
+  writeFileSync(join(dir, 'CHANGELOG.md'), '# Changelog\r\n\r\n## 1.2.3\r\n\r\nold\r\n')
+
+  const plan = planRelease(dir, { bump: 'minor', summary: 'Adds a thing.' })
+  assert.equal(plan.version, '1.3.0')
+  assert.deepEqual(plan.changes.map((c) => c.kind), ['version', 'changelog'])
+  assert.match(planRelease(dir, { version: '1.0.0' }).error, /not newer than 1\.2\.3/)
+
+  const applied = applyRelease(dir, { bump: 'minor', summary: 'Adds a thing.', apply: true })
+  assert.equal(applied.applied, true)
+  assert.equal(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version, '1.3.0')
+  const text = readFileSync(join(dir, 'CHANGELOG.md'), 'utf8')
+  assert.match(text, /## 1\.3\.0/)
+  assert.ok(text.includes('\r\n'), 'CRLF is kept')
+  assert.ok(!/[^\r]\n/.test(text), 'no stray LF was introduced')
+  assert.ok(!/(\r\n){3,}/.test(text), 'no three-blank-line gap')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('planRelease creates a CHANGELOG when there is none', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-release2-'))
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@me/y', version: '0.0.1' }, null, 2) + '\n')
+  const plan = planRelease(dir, { bump: 'patch' })
+  assert.deepEqual(plan.changes.map((c) => c.kind), ['version', 'changelog-create'])
+  assert.match(plan.changes[1].text, /^# Changelog\n\n## 0\.0\.2/)
   rmSync(dir, { recursive: true, force: true })
 })
