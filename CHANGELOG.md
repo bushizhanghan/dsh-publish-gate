@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.29.0
+
+- **`bin-target-missing`** (error): a command in `bin` pointing at a file that does not exist.
+  npm still links it, so the installed package puts a command on PATH that dies on the first run.
+- **`bin-no-shebang`** (warn): the target exists but has no `#!` line. Windows runs it anyway; on
+  unix the shell executes the file itself and the error you see is a shell syntax error.
+- **`no-patch-file` no longer fires for libraries.** It used to report any package with
+  `lib/index.js` and no `cordis.patch.yml`, which made `@deepseek-ai/dsh-atomic-write` and
+  `dsh-tui` look broken. A package with no `dsh` field is not a bundle and is mounted by nothing;
+  only a package that declares itself one owes the host a patch.
+- No `pack-omits-bin` rule on purpose: npm force-includes `bin` targets, so a tarball cannot lose
+  one. A test now asserts that, so nobody adds the rule back after a bad reflex.
+
 ## 0.28.0
 
 Two ways a subpath export can be a promise with nothing behind it. Both used to pass the gate,

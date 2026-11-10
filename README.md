@@ -94,12 +94,14 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `bundle-patch-not-declared` | 有 `cordis.patch.yml` 但清单里没有 `dsh.bundle.patch`——patch 是死的，装了不挂载 |
 | `entry-path-missing` | `main` / `exports["."]` / `exports["./client"]` 指的文件不存在，宿主解析到空 |
 | `exports-target-missing` | 某个子路径导出（`"./engine"` 之类，不是 `"."` 也不是 `"./client"`）指向的文件根本不存在。谁写 `import x from "<包>/engine"` 谁就在运行时拿到解析错误 |
+| `bin-target-missing` | `bin` 里某个命令指向的文件不存在。npm 会给它建软链，装完这条命令能出现在 PATH 上、一跑就报 not found |
 | `entry-missing` | 清单里没有任何一个存在的入口文件——连 `import` 的机会都没有 |
 | `inject-missing-*` | 用了 `ctx.tools` / `ctx.web` / `ctx.webServer` / `ctx.setInterval` 却没在 `inject` 里声明，cordis 永远不激活 |
 | `patch-not-mount` | info：这些顶层 `- id:` 是在覆盖已有条目，合法，但**不是**挂载 |
 | `insert-missing-name` / `insert-name-mismatch` | 挂载名缺失或与 package.json 不一致 |
-| `no-patch-file` | 有 `lib/index.js` 但没有 `cordis.patch.yml` |
+| `no-patch-file` | 声明了 `dsh`（即自称是插件包）却既没有 `cordis.patch.yml` 也没有别的 bundle 补丁——装上了，宿主不会挂载它。没有 `dsh` 字段的纯库不在此列（`@deepseek-ai/dsh-atomic-write`、`dsh-tui` 这类从来没有被谁挂载，要求它们交补丁是门禁自己发明规则） |
 | `no-name-export` / `no-apply-export` | 入口协议不完整 |
+| `bin-no-shebang` | `bin` 指向的文件没有 `#!` 行。Windows 上照样能跑，unix 上 shell 会自己执行它，报的是 shell 语法错，看不出真正原因 |
 | `require-in-esm` | ESM 里 `require()` → `ERR_AMBIGUOUS_MODULE_SYNTAX`，报错不带行号 |
 | `no-license` | 缺 LICENSE |
 | `version-taken` | 这个版本已经在 registry 上，再发是 403 |
@@ -336,7 +338,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 156 个单测
+node --test                      # 160 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

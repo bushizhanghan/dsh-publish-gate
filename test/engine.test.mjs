@@ -20,6 +20,7 @@ import {
   checkMarketReadiness,
   checkMountEntry,
   checkNodeVersion,
+  checkBin,
   checkExportsTargets,
   checkPackageJson,
   checkPack,
@@ -2547,6 +2548,80 @@ test('pack-omits-export catches a file that exists but never ships', async () =>
     assert.ok(hit, `expected pack-omits-export, got ${JSON.stringify(findings.map((f) => f.rule))}`)
     assert.equal(hit.severity, 'error')
     assert.match(hit.title, /exports\["\.\/engine"\] points at lib\/engine\.js, which npm did not pack/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('bin-target-missing names the command, not just the file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-bin-missing-'))
+  try {
+    goodPlugin(dir, { bin: { 'good-cli': 'bin/good.js' } })
+    const hit = checkBin(dir).find((f) => f.rule === 'bin-target-missing')
+    assert.ok(hit, 'a bin pointing at nothing has to be reported')
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /bin "good-cli" points at bin\/good\.js/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('bin-no-shebang is a warning, and a shebang silences it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-bin-shebang-'))
+  try {
+    goodPlugin(dir, { bin: 'bin/good.js' })
+    mkdirSync(join(dir, 'bin'), { recursive: true })
+    writeFileSync(join(dir, 'bin', 'good.js'), 'console.log("hi")\n')
+    const bare = checkBin(dir).filter((f) => f.rule === 'bin-no-shebang')
+    assert.equal(bare.length, 1)
+    assert.equal(bare[0].severity, 'warn')
+    // a string bin is named after the package, scope stripped
+    assert.match(bare[0].title, /bin "dsh-good"/)
+
+    writeFileSync(join(dir, 'bin', 'good.js'), '#!/usr/bin/env node\nconsole.log("hi")\n')
+    assert.deepEqual(checkBin(dir), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('npm packs a bin target even when files says otherwise', async () => {
+  // npm force-includes bin, main, README, LICENSE and package.json. That is why there is
+  // no pack-omits-bin rule: the tarball cannot lose a bin target, so the only real bin
+  // failures are the ones checkBin looks at statically (missing file, missing shebang).
+  const dir = mkdtempSync(join(tmpdir(), 'gate-pack-bin-'))
+  try {
+    goodPlugin(dir, {
+      bin: { 'good-cli': 'bin/good.js' },
+      files: ['lib/index.js', 'cordis.patch.yml', 'README.md', 'LICENSE'],
+    })
+    mkdirSync(join(dir, 'bin'), { recursive: true })
+    writeFileSync(join(dir, 'bin', 'good.js'), '#!/usr/bin/env node\nconsole.log("hi")\n')
+    const { pack } = await checkPack(dir)
+    assert.ok(pack.files.some((f) => f.path === 'bin/good.js'), 'npm includes bin regardless of files')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a library is not asked for a patch, a plugin is', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-patch-gate-'))
+  try {
+    // no dsh field: this is a helper library that nothing mounts
+    goodPlugin(dir, { dsh: undefined })
+    rmSync(join(dir, 'cordis.patch.yml'), { force: true })
+    assert.deepEqual(
+      checkPatchYml(dir).filter((f) => f.rule === 'no-patch-file'),
+      [],
+      'a package that never claimed to be a bundle does not owe the host a patch',
+    )
+
+    // same files, but now it declares itself a bundle
+    goodPlugin(dir, {})
+    rmSync(join(dir, 'cordis.patch.yml'), { force: true })
+    const hit = checkPatchYml(dir).find((f) => f.rule === 'no-patch-file')
+    assert.ok(hit, 'a declared bundle without a patch is mounted by nothing')
+    assert.equal(hit.severity, 'error')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
