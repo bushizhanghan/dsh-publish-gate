@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.28.0
+
+Two ways a subpath export can be a promise with nothing behind it. Both used to pass the gate,
+because only `exports["."]` and `exports["./client"]` were ever looked at.
+
+- **`exports-target-missing`** (error): a key like `"./engine"` pointing at a file nobody wrote.
+  `exportTargets()` now walks the whole map, conditions and arrays included, and skips patterns
+  (`*`) because those resolve at runtime.
+- **`pack-omits-export`** (error): the file exists in the checkout but `files` never packs it, so
+  the failure only appears after install. npm force-includes `main` and whatever `exports["."]`
+  names — it does not extend that courtesy to other subpaths.
+- `"."` and `"./client"` stay with `entry-path-missing` and `client-file-missing`, so one broken
+  path is still one finding, not two.
+- 33 real published plugins: neither rule fires once, so the new checks are not trading false
+  positives for coverage.
+
 ## 0.27.0
 
 A workspace root is not a flat list of directories, and the sweep used to treat it as one.

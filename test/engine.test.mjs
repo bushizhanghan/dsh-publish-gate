@@ -20,6 +20,7 @@ import {
   checkMarketReadiness,
   checkMountEntry,
   checkNodeVersion,
+  checkExportsTargets,
   checkPackageJson,
   checkPack,
   checkPatchYml,
@@ -2509,6 +2510,43 @@ test('no-test-files accepts TypeScript specs', () => {
     writeFileSync(join(dir, 'tests', 'auth.ts'), 'export const x = 1\n')
     rmSync(join(dir, 'tests', 'auth.spec.ts'))
     assert.ok(checkTests(dir).some((f) => f.rule === 'no-test-files'), 'a plain .ts helper is not a test')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('exports-target-missing is reported for a subpath nobody wrote', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-exports-'))
+  try {
+    goodPlugin(dir, { exports: { '.': './lib/index.js', './engine': './lib/engine.js' } })
+    const missing = checkExportsTargets(dir)
+    assert.equal(missing.length, 1)
+    assert.equal(missing[0].rule, 'exports-target-missing')
+    assert.equal(missing[0].severity, 'error')
+    assert.match(missing[0].title, /exports\["\.\/engine"\] points at lib\/engine\.js/)
+
+    writeFileSync(join(dir, 'lib', 'engine.js'), 'export const engine = true\n')
+    assert.deepEqual(checkExportsTargets(dir), [], 'a file that exists is not a finding')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('pack-omits-export catches a file that exists but never ships', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-pack-export-'))
+  try {
+    // files names the entry, so npm packs lib/index.js and nothing else from lib/.
+    goodPlugin(dir, {
+      exports: { '.': './lib/index.js', './engine': './lib/engine.js' },
+      files: ['lib/index.js', 'cordis.patch.yml', 'README.md', 'LICENSE'],
+    })
+    writeFileSync(join(dir, 'lib', 'engine.js'), 'export const engine = true\n')
+    const { findings, pack } = await checkPack(dir)
+    assert.ok(!pack.files.some((f) => f.path === 'lib/engine.js'), 'the fixture must really omit it')
+    const hit = findings.find((f) => f.rule === 'pack-omits-export')
+    assert.ok(hit, `expected pack-omits-export, got ${JSON.stringify(findings.map((f) => f.rule))}`)
+    assert.equal(hit.severity, 'error')
+    assert.match(hit.title, /exports\["\.\/engine"\] points at lib\/engine\.js, which npm did not pack/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

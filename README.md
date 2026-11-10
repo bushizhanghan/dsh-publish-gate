@@ -93,6 +93,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `no-insert-row` | patch 里只有 override，永远不挂载（页面报的仍然是这条——顶层 `- id:` 是 patch 不是挂载） |
 | `bundle-patch-not-declared` | 有 `cordis.patch.yml` 但清单里没有 `dsh.bundle.patch`——patch 是死的，装了不挂载 |
 | `entry-path-missing` | `main` / `exports["."]` / `exports["./client"]` 指的文件不存在，宿主解析到空 |
+| `exports-target-missing` | 某个子路径导出（`"./engine"` 之类，不是 `"."` 也不是 `"./client"`）指向的文件根本不存在。谁写 `import x from "<包>/engine"` 谁就在运行时拿到解析错误 |
 | `entry-missing` | 清单里没有任何一个存在的入口文件——连 `import` 的机会都没有 |
 | `inject-missing-*` | 用了 `ctx.tools` / `ctx.web` / `ctx.webServer` / `ctx.setInterval` 却没在 `inject` 里声明，cordis 永远不激活 |
 | `patch-not-mount` | info：这些顶层 `- id:` 是在覆盖已有条目，合法，但**不是**挂载 |
@@ -121,6 +122,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `pack-omits-lib` | tarball 里没有 `lib/`——发出去是空包，**npm 不警告** |
 | `pack-omits-patch` | `dsh.bundle.patch` 指的文件没进 tarball，装上不挂载 |
 | `pack-omits-client` | `exports["./client"]` 指的文件没进 tarball。npm **不会**因为它在 `exports` 里就强制入包（只强制 `main`），所以 `files` 里没写它就会静默丢掉——本地能跑、装了没侧栏 |
+| `pack-omits-export` | 子路径指向的文件在仓库里有，但 `files` 没让它进 tarball。和上一条的区别：代码没问题，**发出去的那个包**少了文件，装完 `import "<包>/engine"` 解析到空 |
 | `pack-omits-readme` / `pack-omits-license` | README / LICENSE 没进包 |
 | `pack-oversize` | 解包 >5 MB 是 error、>1 MB 是 warn，并点名最大的三个文件。测试 fixture 是常见元凶——我的一个插件曾把 20 MB 的算例目录发上去，装了它的人每次都要下 20 MB |
 | `pack-ships-secret` | tarball 里有 `.env` / `.npmrc` / `*.pem` / `*.key` / `id_rsa`。没写 `files` 字段时 npm 会把 `.gitignore` 没排除的一切都打包，而包一发布就是公开的、npm 不会帮你撤回 |
@@ -334,7 +336,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 154 个单测
+node --test                      # 156 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
