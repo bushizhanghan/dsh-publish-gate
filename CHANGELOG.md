@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.30.0
+
+Before this, the gate could tell you whether a publish was *allowed*; it could not tell you what
+that publish would *change*. `publish_gate_drift` compares the tarball you have now with the
+tarball that is live: added files, removed files, and files whose size changed.
+
+- Answers the question you actually ask before shipping a version bump — did the build run, is the
+  debug file in there, did `files` start including something new.
+- `against` picks the version; default is the latest published one.
+- An unreadable registry is `drift-unavailable` (warn) and says in the detail that this is **not**
+  the same as "no changes" — the whole point of the last few releases.
+- Sizes come from extracting and stat-ing, not from `tar -tvzf`: the bsdtar that ships with Windows
+  prints a localised date (`10月 26  1985`) and the only number nearby is the year, which silently
+  turned every file into "added".
+
 ## 0.29.0
 
 - **`bin-target-missing`** (error): a command in `bin` pointing at a file that does not exist.

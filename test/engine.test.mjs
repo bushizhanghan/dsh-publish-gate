@@ -24,6 +24,7 @@ import {
   checkExportsTargets,
   checkPackageJson,
   checkPack,
+  diffPack,
   checkPatchYml,
   checkPublishIdentity,
   checkPublishedMatches,
@@ -2625,4 +2626,24 @@ test('a library is not asked for a patch, a plugin is', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('diffPack names every difference between what ships and what is live', () => {
+  const local = [
+    { path: 'lib/index.js', size: 100 },
+    { path: 'lib/new.js', size: 10 },
+    { path: 'README.md', size: 5 },
+  ]
+  const live = [
+    { path: 'lib/index.js', size: 90 },
+    { path: 'lib/gone.js', size: 7 },
+    { path: 'README.md', size: 5 },
+  ]
+  const d = diffPack(local, live)
+  assert.deepEqual(d.added, ['lib/new.js'])
+  assert.deepEqual(d.removed, ['lib/gone.js'])
+  assert.deepEqual(d.changed, ['lib/index.js'])
+  assert.equal(d.same, false)
+  assert.equal(diffPack(local, local).same, true, 'identical size lists are not a change')
+  assert.equal(diffPack(null, undefined).same, true, 'missing input is not a difference')
 })
