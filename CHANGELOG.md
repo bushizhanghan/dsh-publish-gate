@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.42.0
+
+- `ship` 的 repo 步现在会把 `repository` 写进 package.json（仅当这次真的要建仓库/推代码，即 `confirm: true`）。没有它，npm 上没有源码链接，`publish_gate_status` 会永远回答「还没上 GitHub」——这条是本机真跑 `ship` 时发现的，之前所有发布都是我手写脚本补的。
+- `publish_gate_ship` 的 `skipPack` / `skipTools` / `skipClient` 三个开关现在真的写在参数表里：它们一直在代码里读，却从没声明过——宿主只会把声明的参数交给模型，所以那三条分支永远走不到。
+- 两个市场测试不再真连 api.github.com：它们让整套测试从 110 秒降到 50 秒，也不再吃 GitHub 的未认证配额。
+- 单测 187 → 188。
+
 ## 0.41.0
 
 **The push step could never have worked on a brand-new repository.**

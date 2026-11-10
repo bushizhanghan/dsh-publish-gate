@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MARKET_MIN_REPO_AGE_MS, ensureRepo, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -370,6 +370,29 @@ test('an empty repository commits through the contents API instead of failing on
     assert.equal(res.ok, true)
     assert.equal(res.method, 'contents')
     assert.equal(calls.filter((c) => c.startsWith('PUT')).length, 2, 'one PUT per file')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('repository is written into package.json before the push, not after', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ship-repo-field-'))
+  try {
+    const CR = String.fromCharCode(13)
+    const LF = String.fromCharCode(10)
+    const file = join(dir, 'package.json')
+    writeFileSync(file, '{' + LF + '  "name": "@me/pkg",' + LF + '  "version": "1.0.0"' + LF + '}' + LF)
+    const done = ensureRepositoryField(dir, 'me/pkg')
+    assert.equal(done.changed, true)
+    const json = JSON.parse(readFileSync(file, 'utf8'))
+    assert.deepEqual(json.repository, { type: 'git', url: 'git+https://github.com/me/pkg.git' })
+    assert.ok(!readFileSync(file, 'utf8').includes(CR), 'the file keeps its LF endings')
+
+    const again = ensureRepositoryField(dir, 'me/pkg')
+    assert.equal(again.changed, false, 'a second run is a no-op')
+
+    const other = ensureRepositoryField(dir, 'other/pkg')
+    assert.equal(other.changed, false, 'an existing different repository is not overwritten')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

@@ -1879,7 +1879,7 @@ test('market-fork-of-listed: a fork of an already-listed repo must say so', asyn
     goodPlugin(dir, { repository: { type: 'git', url: 'git+https://github.com/bushizhanghan/dsh-workbuddy-harness.git' } })
     const entries = [{ name: 'upstream', url: 'https://github.com/Faide-cyber/dsh-workbuddy', category: 'model' }]
     const repoInfo = { fork: true, created_at: '2026-01-01T00:00:00Z', parent: { full_name: 'Faide-cyber/dsh-workbuddy' } }
-    const rules = (await checkMarketReadiness(dir, { entries, repoInfo })).map((f) => f.rule)
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo, releaseInfo: {} })).map((f) => f.rule)
     assert.ok(rules.includes('market-fork-of-listed'), rules.join(','))
     assert.ok(rules.includes('market-fork-undisclosed'), rules.join(','))
   } finally {
@@ -1894,7 +1894,7 @@ test('market-fork-of-listed: naming the upstream clears the undisclosed warning'
     writeFileSync(join(dir, 'README.md'), '# Fork\n\nA fork of Faide-cyber/dsh-workbuddy. Do not install both.\n')
     const entries = [{ name: 'upstream', url: 'https://github.com/Faide-cyber/dsh-workbuddy', category: 'model' }]
     const repoInfo = { fork: true, created_at: '2026-01-01T00:00:00Z', parent: { full_name: 'Faide-cyber/dsh-workbuddy' } }
-    const rules = (await checkMarketReadiness(dir, { entries, repoInfo })).map((f) => f.rule)
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo, releaseInfo: {} })).map((f) => f.rule)
     assert.ok(rules.includes('market-fork-of-listed'), rules.join(','))
     assert.ok(!rules.includes('market-fork-undisclosed'), rules.join(','))
   } finally {

@@ -52,6 +52,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 默认跑全部六步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
 
+带了 `confirm: true` 且 `package.json` 里没有 `repository` 时，`repo` 这一步会顺手把仓库地址写进去：没有这一行，npm 上的包没有源码链接，之后每次 `status` 也只会回答「还没上 GitHub」。只在仓库这一步真要执行时才写，纯预览不会动你的文件。
+
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
 
 空仓库的第一次提交走 Contents API：GitHub 对没有任何 commit 的仓库，所有 git-data 接口一律回 409，所以「刚建好的仓库」根本推不上去。现在遇到 409 就改成一个文件一次 `PUT /contents` 建首个 commit，第二次起才回到 blob/tree/commit 那条快路。
@@ -412,7 +414,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 181 个单测
+node --test                      # 188 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
