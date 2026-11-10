@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.39.0
+
+Two errors that were not errors.
+
+- `no-exports` was an error claiming that with only `main` "the plugin silently does not load". That is false:
+  Node's ESM resolver falls back to `main` (verified with a bare `import '@me/mainonly'` against a package
+  that has no `exports`). It is now a warning about pinning the public entry, and the text no longer claims
+  a failure that does not happen.
+- `no-license` was an error. npm publishes anyway and the code runs; what is missing is the licence itself.
+  Now a warning.
+- The `check` step said "the gate has no errors" when a dozen warnings were waiting. It now says
+  "the gate has no errors (12 warnings left)" or "(no warnings either)".
+
+A minimal but genuinely valid plugin — `main` + `type: module` + a patch — used to fail the gate and now passes
+with warnings only, which is what it deserves.
 ## 0.38.0
 
 Five arguments that used to be quietly reinterpreted.

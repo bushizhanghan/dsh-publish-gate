@@ -138,7 +138,7 @@ test('files omitting lib is flagged statically and blocked by the tarball check'
   }
 })
 
-test('missing exports["."] is an error', () => {
+test('missing exports["."] is a warning, because main still resolves', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-exports-'))
   try {
     goodPlugin(dir)
@@ -146,7 +146,9 @@ test('missing exports["."] is an error', () => {
     const json = JSON.parse(readFileSync(p, 'utf8'))
     delete json.exports
     writeFileSync(p, JSON.stringify(json))
-    assert.ok(checkPackageJson(dir).some((f) => f.rule === 'no-exports' && f.severity === 'error'))
+    const found = checkPackageJson(dir).find((f) => f.rule === 'no-exports')
+    assert.equal(found?.severity, 'warn')
+    assert.doesNotMatch(String(found?.detail), /silently does not load/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

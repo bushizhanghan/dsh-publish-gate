@@ -54,6 +54,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
 
+两个被高估的 error 降成 warn：`no-exports` 和 `no-license` 原来都算 blocker，但它们都不会让插件坏掉——Node 在没有 `exports` 时会回退到 `main`（我用裸 ESM import 实测过），没有 LICENSE 也照发照跑。error 应该只留给「装上去真的会坏」的事。
+
 参数写错不会变成默认值：`bump` 写错、`owner` 传了数字、token 传了数字、`forget` 传了字符串、`fuzz: "yes"` —— 这些都直接拒绝并说明该传什么。静默退回默认值最坏的情况是「你以为它 fuzz 过了，其实一个工具都没调」。
 
 `check` 这一步跑的就是完整门禁（静态 + 打包 + 运行时三层），所以这里的「没有 error」和 `publish_gate` 说的是同一件事——不是只看了 package.json 就说干净。实测 3.6 秒。
