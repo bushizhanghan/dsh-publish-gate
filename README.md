@@ -69,7 +69,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_smoke` | **装之前最接近真装的一次检查**：把 registry 上那个 tarball 下下来，解到 **profile 自己的 node_modules 里**（所以它的裸 import 会照真实依赖解析，而不是在系统临时目录里报 ERR_MODULE_NOT_FOUND）、import 入口、`apply(ctx)` 一遍，报注册了什么、有没有抛。跑完自己清干净 |
 | `publish_gate_ci` | 生成 `.github/workflows/publish-gate.yml`：CI 能真做的两件事——跑测试、以及校验 tarball 里到底有没有解析出来的入口文件和 `cordis.patch.yml`。**不假装**能在 runner 上跑完整门禁（那里没有 profile、没有宿主、也进不去你的 npm scope） |
 | `publish_gate_update` | **装之前先回答该不该装**。市场里的更新插件都是装完起不来才回滚；这个先把 registry 上那个版本真的下载下来、解包到临时目录，跑同一套产物层与运行时层：入口能不能 import、`apply()` 能不能注册、tarball 里有没有代码、参数传错会不会抛。只在 checkout 里才有意义的规则（git / 市场 / 测试 / 链接）会被过滤掉，结论只关于代码。传 `dir` 或 `name` 都行（只给包名时从已装副本读当前版本） |
-| `publish_gate_drift` | 把「现在这个包」和「线上那个包」逐文件比：多了什么、少了什么、哪些文件大小变了（重建就是从这里看出来的）。回答的是「这次发出去到底会改变什么」，不是「能不能发」 |
+| `publish_gate_drift` | 把「现在这个包」和「线上那个包」逐文件比：多了什么、少了什么、哪些文件内容变了（按 sha256 比，不看大小——重建就是从这里看出来的）。回答的是「这次发出去到底会改变什么」，不是「能不能发」 |
 | `publish_gate_fix` | 只做「规则只有一个正确答案」的那两类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）。**默认 dry-run**，只说改哪几处、为什么；`apply: true` 才写回 `package.json`。代码、版本、依赖一律不碰 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
@@ -339,7 +339,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 161 个单测
+node --test                      # 162 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

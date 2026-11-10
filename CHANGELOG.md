@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.31.0
+
+`publish_gate_drift` compared file **sizes**. That misses the most common silent rebuild: a
+change that keeps every file the same length. It now compares **sha256** of each file (16 hex
+characters, enough that two builds of the same file never collide).
+
+- Local side: hashed from `npm pack --dry-run --json`'s own file list, so only files that would
+  actually ship are compared - never `test/` or `.git`.
+- Live side: hashed while the tarball is already extracted, so this costs one `readFileSync` per
+  file, no second download.
+- Falls back to size when only one side is hashed, and says nothing it cannot prove.
+
+Verified on a real plugin: a clean checkout of `dsh-page-monitor` against its published 0.1.5 is
+`same: true`; the same checkout with one character changed - same byte length - is reported as
+`~1 changed`.
+
 ## 0.30.0
 
 Before this, the gate could tell you whether a publish was *allowed*; it could not tell you what

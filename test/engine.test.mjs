@@ -2647,3 +2647,12 @@ test('diffPack names every difference between what ships and what is live', () =
   assert.equal(diffPack(local, local).same, true, 'identical size lists are not a change')
   assert.equal(diffPack(null, undefined).same, true, 'missing input is not a difference')
 })
+
+test('diffPack sees a change that keeps the size the same', () => {
+  const one = [{ path: 'lib/index.js', size: 100, hash: 'aaaa' }]
+  const other = [{ path: 'lib/index.js', size: 100, hash: 'bbbb' }]
+  assert.deepEqual(diffPack(one, other).changed, ['lib/index.js'], 'a rebuild that only moves bytes is still a change')
+  assert.deepEqual(diffPack(one, [{ path: 'lib/index.js', size: 100, hash: 'aaaa' }]).changed, [])
+  // without hashes on one side there is nothing better than size to compare
+  assert.deepEqual(diffPack([{ path: 'a.js', size: 1 }], [{ path: 'a.js', size: 1 }]).changed, [])
+})
