@@ -307,3 +307,48 @@ test('a slug in an organisation is created there, not in the account', async () 
   await ensureRepo('t', 'me/pkg', { transport })
   assert.ok(calls.includes('POST /user/repos'), 'a personal slug still goes to /user/repos')
 })
+
+test('the dsh-plugin topic is set, because the market rejects the entry without it', async () => {
+  const puts = []
+  const transport = (path, init) => {
+    if (path === '/repos/me/pkg') return Promise.resolve({ ok: true, status: 200, data: { topics: [] } })
+    if (path === '/repos/me/pkg/topics') { puts.push(init.body.names.join(',')); return Promise.resolve({ ok: true, status: 200, data: { names: init.body.names } }) }
+    return Promise.resolve({ ok: false, status: 500, why: 'unexpected ' + path })
+  }
+  const res = await ensureRepo('t', 'me/pkg', { transport })
+  assert.equal(res.ok, true)
+  assert.deepEqual(res.topics.added, ['dsh', 'dsh-plugin'])
+  assert.deepEqual(puts, ['dsh,dsh-plugin'])
+
+  const quiet = []
+  const already = (path, init) => {
+    if (path === '/repos/me/pkg') return Promise.resolve({ ok: true, status: 200, data: { topics: ['dsh', 'dsh-plugin', 'other'] } })
+    quiet.push(path)
+    return Promise.resolve({ ok: false, status: 500 })
+  }
+  const again = await ensureRepo('t', 'me/pkg', { transport: already })
+  assert.deepEqual(again.topics.added, [])
+  assert.deepEqual(quiet, [], 'no write when the topics are already there')
+})
+
+test('re-running the market step reuses the branch and replaces the file instead of 422', async () => {
+  const seen = []
+  const transport = async (path, init) => {
+    seen.push((init.method || 'GET') + ' ' + path)
+    if (path === '/user') return { ok: true, status: 200, data: { login: 'me' } }
+    if (path.endsWith('/forks')) return { ok: true, status: 422, data: {} }
+    if (path.includes('/merge-upstream')) return { ok: false, status: 409, text: 'conflict' }
+    if (path === '/repos/awesome-dsh-plugin/awesome-dsh-plugin') return { ok: true, status: 200, data: { default_branch: 'main' } }
+    if (path === '/repos/me/awesome-dsh-plugin/git/ref/heads/main') return { ok: true, status: 200, data: { object: { sha: 'tip' } } }
+    if (path === '/repos/me/awesome-dsh-plugin/git/ref/heads/market-me-pkg') return { ok: false, status: 404, text: 'not found' }
+    if (path === '/repos/me/awesome-dsh-plugin/git/refs') { seen.push('body:' + init.body.sha); return { ok: true, status: 201, data: {} } }
+    if (path.includes('/contents/') && (!init.method || init.method === 'GET')) return { ok: true, status: 200, data: { sha: 'oldsha' } }
+    if (path.includes('/contents/')) { seen.push('sha:' + (init.body.sha || 'none')); return { ok: true, status: 200, data: {} } }
+    if (path.endsWith('/pulls')) return { ok: true, status: 201, data: { html_url: 'https://github.com/x/y/pull/2', number: 2 } }
+    return { ok: false, status: 500, text: 'unexpected ' + path }
+  }
+  const res = await openMarketPR('t', { slug: 'me-pkg', name: '@me/pkg', entryPath: 'data/plugins/me__pkg.yml', yaml: 'url: x' + String.fromCharCode(10), transport })
+  assert.equal(res.ok, true)
+  assert.ok(seen.includes('body:tip'), 'the branch is created from the fork tip')
+  assert.ok(seen.includes('sha:oldsha'), 'the existing file is replaced with its sha')
+})

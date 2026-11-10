@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.40.0
+
+The market step was the one part of the chain I had never run through the plugin.
+
+- **The `dsh-plugin` topic is now set for you.** The pull request template requires the repository to carry it;
+  without it the entry is rejected even when everything else is right (that is how arg-guard came back). Creating
+  or reusing a repository now also PUTs `/topics` with `dsh` and `dsh-plugin`, and the repo step says so.
+- **The fork is synced before branching.** A fork that is behind upstream made the pull request carry every commit
+  we were missing. It now calls `merge-upstream` first; 409 (conflict) and 404 (older forks) are not fatal.
+- **Re-running no longer 422s.** A fresh fork has no branch to write to, and an existing entry needs its `sha` to
+  be replaced. The step now creates the branch from the fork tip when missing, and sends `sha` when the file is
+  already there.
+
+Both are things I had done by hand in shell scripts for three earlier releases, which is exactly the evidence that
+the plugin was not doing them.
 ## 0.39.0
 
 Two errors that were not errors.
