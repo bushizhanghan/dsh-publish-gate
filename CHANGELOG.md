@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.48.0
+
+- `publish_gate_status` 修两个假话：`entry:` 一直写 `NOT FOUND`（入口算出来了却没赋值），`repository:` 在没有 GitHub token 时说「还没上 GitHub」——但公开仓库查询本来不需要凭据，只有创建仓库和开 PR 需要。现在无 token 也能读到仓库年龄与市场时间，有 token 才升级到 5000/h。
+- GitHub 市场检查可以用认证请求了：存过 `GITHUB_TOKEN` 就自动带 `Bearer`（5000/h，未认证只有 60/h），额度打满时明确写 `HTTP 403 rate limit exhausted until HH:MMZ`，而不是把限流和「仓库不存在」混成一件事。
+- `verify` 的等待窗口按实测调大：npm 从 `publish` 成功到版本可见实测 35–252 秒，原来默认等 45 秒、上限 60 秒（`publish_gate_verify` 上限 90 秒），经常在「其实已经成功」时给出「还没追上」。现在 `ship` 默认等 100 秒、上限 110 秒，`publish_gate_verify` 上限同样 110 秒，消息里直接写清这个窗口并说明 `pending` 不是失败。
+- 单独跑 `verify`（这次调用没有发布）只做 15 秒宽限轮询，不会让你白等两分钟。
+
 ## 0.47.0
 
 - 不再硬要一个 npm token：`ship` 现在先问 `npm whoami`（`npm publish` 本来就靠 `~/.npmrc`），只在机器真的没登录时才说 `needs npmToken`。原来在一台能从 shell 发布二十个版本的机器上，`status` 依然写「npm missing」。

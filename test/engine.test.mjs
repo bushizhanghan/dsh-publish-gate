@@ -4,51 +4,53 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
+  applyRelease,
   bumpPatch,
+  bumpVersion,
   CARD_KINDS,
+  checkBin,
   checkBuildFreshness,
+  checkChangelog,
   checkClientHalf,
   checkClientRuntime,
   checkDependencies,
-  entryFile,
   checkDocs,
   checkEntrySource,
+  checkExportsTargets,
   checkInjectCoverage,
   checkLibHygiene,
   checkLocalLink,
   checkMarketEntry,
   checkMarketReadiness,
   checkMountEntry,
-  checkNodeVersion,
-  checkBin,
-  checkExportsTargets,
-  checkPackageJson,
   checkMountIdCollision,
-  mountIds,
-  applyRelease,
-  bumpVersion,
-  planRelease,
+  checkNodeVersion,
   checkPack,
-  diffPack,
+  checkPackageJson,
   checkPatchYml,
-  checkPublishIdentity,
   checkPublishedMatches,
-  checkStoreConflict,
+  checkPublishIdentity,
   checkReadmeTruth,
+  checkStoreConflict,
+  checkTestRun,
   checkTests,
   checkToolRegistrations,
   checkTraceability,
   checkVersionTaken,
   compareVersions,
+  diffPack,
+  entryFile,
+  ghFailure,
+  ghHeaders,
   latestPublished,
+  mountIds,
   packageOf,
+  planRelease,
   renderReport,
   repoSlug,
   runArtifactChecks,
-  checkChangelog,
-  checkTestRun,
-  straySeverities,
   runStaticChecks,
+  straySeverities,
   waitForPublished,
 } from '../lib/engine.js'
 
@@ -2755,4 +2757,14 @@ test('a version lookup never treats a failed request as "not published"', async 
   assert.equal(bad.unknown, true)
   const unreachable = await registryVersion('@me/pkg', '1.0.0', { registry: 'http://127.0.0.1:9', timeoutMs: 1500 })
   assert.equal(unreachable.unknown, true)
+})
+
+test('an unauthenticated GitHub call is labelled as a rate limit, not as a missing repo', () => {
+  assert.equal(ghHeaders(undefined).authorization, undefined)
+  assert.equal(ghHeaders('abc').authorization, 'Bearer abc')
+  const res = (status, remaining, reset) => ({ status, headers: { get: (n) => ({ 'x-ratelimit-remaining': remaining, 'x-ratelimit-reset': reset })[n] ?? null } })
+  assert.match(ghFailure(res(403, '0', '1900000000')), /rate limit exhausted/)
+  assert.match(ghFailure(res(403, '0', '1900000000')), /5000\/h/)
+  assert.equal(ghFailure(res(404, null, null)), 'HTTP 404')
+  assert.equal(ghFailure(res(403, '12', null)), 'HTTP 403')
 })

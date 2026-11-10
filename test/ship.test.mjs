@@ -465,3 +465,32 @@ test('chainState asks npm even when there is no GitHub token', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('a read-only GitHub call works without a token, and says which entry file it found', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-state-'))
+  fixturePlugin(dir)
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+  pkg.repository = { type: 'git', url: 'git+https://github.com/me/state-fixture.git' }
+  writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg, null, 2))
+  const before = globalThis.fetch
+  let headers = null
+  let asked = 0
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith("https://api.github.com")) {
+      asked += 1
+      headers = init.headers
+      return { ok: true, status: 200, text: async () => JSON.stringify({ created_at: '2020-01-01T00:00:00Z', private: false }) }
+    }
+    return { ok: false, status: 404, json: async () => ({}) }
+  }
+  try {
+    const state = await chainState("", dir)
+    assert.equal(state.entry, 'lib/index.js', 'status used to print NOT FOUND on every repo')
+    assert.equal(asked, 1, 'the public repo lookup must not be gated on a token')
+    assert.equal(headers.authorization, undefined, 'no token means no Authorization header')
+    assert.equal(state.repo.slug, 'me/state-fixture')
+  } finally {
+    globalThis.fetch = before
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
