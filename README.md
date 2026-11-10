@@ -50,9 +50,9 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["check", "git", "repo", "push"]
 publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true, category: "tools", en: "...", zh: "..." })
 ```
 
-默认跑全部六步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
+默认跑全部七步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、核对线上字节、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
 
-`npm` 那一步不只认 `npm publish` 的退出码：发完它会拿本地 tarball 的 shasum 去轮询 registry，直到确定「线上就是这份字节」才罢休（默认最多等 45 秒，可用 `waitMs` 调到 60 秒上限）。等不到不算失败，返回里 `verified: false` 并提示你跑 `publish_gate_verify` 复核。
+`npm` 那一步只认 `npm publish` 的退出码——退出码 0 只说明 npm 收下了，不说明 registry 上的字节就是这份构建。所以核对是**独立的一步** `verify`：拿本地 tarball 的 shasum 去轮询 registry，直到确定「线上就是这份字节」才算过（默认最多等 45 秒，可用 `waitMs` 调到 60 秒上限）。三种结果分开说：对上了 → `verified: true`；线上是别的字节 → 明确告诉你「这个目录在发布之后改过」；还没追上 → `verified: false` 并提示你过一会儿跑 `publish_gate_verify`。
 
 带了 `confirm: true` 且 `package.json` 里没有 `repository` 时，`repo` 这一步会顺手把仓库地址写进去：没有这一行，npm 上的包没有源码链接，之后每次 `status` 也只会回答「还没上 GitHub」。只在仓库这一步真要执行时才写，纯预览不会动你的文件。
 
@@ -145,7 +145,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_release` | 发布前那两件手工活：改版本号、在 CHANGELOG 顶部开一节。默认只告诉你它要改什么，`apply: true` 才写；保留 CRLF，不会写出三段空行，不会重复开同一节 |
 | `publish_gate_setup` | 收一次密钥，之后不用再给：token 存进宿主自己的凭据库（和「模型」页同一个库），只回报「配好了没有」，绝不把值回显 |
 | `publish_gate_status` | 一条链上我现在在哪：入口文件、仓库建没建、市场门禁开了没、npm 上有没有这个版本 |
-| `publish_gate_ship` | 按顺序跑整条链：门禁 → 提交 → 建仓库 → 推代码 → npm 发布 → 市场条目 + PR。哪步失败停在哪步，重跑能接着走；`confirm: true` 才做不可逆的两步，并告诉你**最早什么时候能进市场** |
+| `publish_gate_ship` | 按顺序跑整条链：门禁 → 提交 → 建仓库 → 推代码 → npm 发布 → 核对线上字节 → 市场条目 + PR。哪步失败停在哪步，重跑能接着走；`confirm: true` 才做不可逆的动作，并告诉你**最早什么时候能进市场** |
 | `publish_gate_fix` | 只做「规则只有一个正确答案」的那两类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）。**默认 dry-run**，只说改哪几处、为什么；`apply: true` 才写回 `package.json`。代码、版本、依赖一律不碰 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
@@ -416,7 +416,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 188 个单测
+node --test                      # 189 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

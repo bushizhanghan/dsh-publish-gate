@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.44.0
+
+- `ship` 多了第七步 `verify`：核对「registry 上的字节是不是这份构建」原来是 npm 步的尾巴，`verified: false` 时 `next` 却是 `none`，你还得自己想起去跑 `publish_gate_verify`。核对本来就是独立的证据，现在它是独立的一步，并出现在默认步骤、`steps` 枚举与 `planned` 里。
+- 三种结果分开说：对上 → `verified: true`；线上是别的字节 → 明确说「这个目录在发布之后改过」；还没追上 → `verified: false` 并提示过一会儿复核。改之前第二种情况会被误报成「还没追上」，等于把「你改了代码」说成「npm 慢了」。
+- 预览不再假装核对过：没给 `confirm` 时 `verify` 与 `npm` 一起标成 `planned`，`verified` 保持 `false`。
 ## 0.43.0
 
 - `ship` 的 npm 步不再只看退出码：发完立刻用本地 tarball 的 shasum 去轮询 registry，确认线上就是这份字节才报 `verified: true`；等不到就报 `verified: false` 并让你跑 `publish_gate_verify`。这个插件自己每发一版都要手动轮询 35–250 秒，全链路一直缺最后一公里。

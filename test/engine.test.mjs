@@ -865,6 +865,23 @@ test('an inject entry nothing ever uses is reported — the typo that never acti
   }
 })
 
+test('optional chaining still counts as using a declared service', () => {
+  // This package injects 'credentials' and reaches it as `ctx?.credentials` from a
+  // helper; the rule used to call that unused, on the gate itself.
+  const dir = mkdtempSync(join(tmpdir(), 'gate-injectopt-'))
+  try {
+    goodPlugin(dir)
+    writeFileSync(
+      join(dir, 'lib', 'index.js'),
+      `export const name = 'good'\nexport const inject = ['tools', 'credentials']\nexport function apply(ctx, config = {}) {\n  const api = ctx?.credentials\n  if (api) api.resolve('NPM_TOKEN')\n  ctx.tools.register({ name: 'good_x', description: 'Reads a directory and returns its tool count.', parameters: {}, output: { schema: { type: 'json' } }, async execute() {} })\n}\n`,
+    )
+    const unused = checkInjectCoverage(dir).filter((f) => f.rule === 'inject-unused-service')
+    assert.deepEqual(unused.map((f) => f.title), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // ---------------------------------------------------------------------------
 // The browser half
 // ---------------------------------------------------------------------------

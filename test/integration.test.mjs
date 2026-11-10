@@ -292,6 +292,15 @@ try {
     'ship without an npm token asks for one instead of publishing',
     noToken.ok === false && (noToken.needs || []).some((n) => n.key === 'npmToken') && noToken.verified === false,
   ])
+  // Proving the bytes is its own step: a preview must not pretend it verified
+  // anything, and the step list has to name it or the step can never run.
+  const preview = await shipTool.execute({ dir: HERE.replace(/\/test\/?$/, ''), steps: ['check', 'git', 'npm', 'verify'] }, { signal: undefined })
+  results.push([
+    'ship keeps verify planned until confirm, and lists it as a real step',
+    (shipParams.steps.items?.enum || shipParams.steps.enum || []).includes('verify') &&
+      (preview.planned || []).includes('verify') &&
+      preview.verified === false,
+  ])
 } catch (error) {
   console.error('UNEXPECTED THROW (ship):', error)
   results.push(['ship: no-throw', false])
