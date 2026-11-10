@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MARKET_MIN_REPO_AGE_MS, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, decidePublish, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -396,4 +396,16 @@ test('repository is written into package.json before the push, not after', () =>
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('republishing the same bytes is a no-op, different bytes is a conflict', () => {
+  // npm answers E403 when a version already exists, which says nothing about
+  // whether the registry holds the same bytes. Rerunning the chain after a
+  // release used to look like a failure; it is only a failure if the bytes differ.
+  assert.equal(decidePublish('aaa', { exists: false }), 'publish')
+  assert.equal(decidePublish('aaa', { exists: true, shasum: 'aaa' }), 'already')
+  assert.equal(decidePublish('aaa', { exists: true, shasum: 'bbb' }), 'conflict')
+  // Unknown on either side is not a reason to block a publish.
+  assert.equal(decidePublish('', { exists: true, shasum: 'bbb' }), 'publish')
+  assert.equal(decidePublish('aaa', { unknown: true }), 'publish')
 })

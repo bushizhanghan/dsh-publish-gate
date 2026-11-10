@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.45.0
+
+- 重跑 `ship` 不再被 npm 的 E403 判成失败：发布前先查 registry 这个版本存不存在，字节相同就记成「已经在线上、无需重发」，字节不同就明确拦住并让你改版本号。原先一次成功的发布之后重跑，看起来像出错。
+- 新增 `decidePublish(localShasum, existing)` 与 `registryVersion(name, version)`；网络失败返回 `unknown`，绝不被读成「没发布过」。
+
 ## 0.44.0
 
 - `ship` 多了第七步 `verify`：核对「registry 上的字节是不是这份构建」原来是 npm 步的尾巴，`verified: false` 时 `next` 却是 `none`，你还得自己想起去跑 `publish_gate_verify`。核对本来就是独立的证据，现在它是独立的一步，并出现在默认步骤、`steps` 枚举与 `planned` 里。

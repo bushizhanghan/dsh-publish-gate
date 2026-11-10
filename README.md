@@ -58,6 +58,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
 
+重跑一次链子不会变成失败：某个版本已经在 npm 上了，`npm publish` 会回 E403「cannot publish over」，这句话既不说明字节一样也不说明不一样。现在发之前先问 registry 这个版本存不存在——**字节一样就当作没事发生**（记 `this exact version is already on the registry with these bytes`），**字节不同就直接拦住**，告诉你「这个版本已经有别的字节了，改版本号，别覆盖」。这才是「重跑能接着走」的真实含义。
+
 空仓库的第一次提交走 Contents API：GitHub 对没有任何 commit 的仓库，所有 git-data 接口一律回 409，所以「刚建好的仓库」根本推不上去。现在遇到 409 就改成一个文件一次 `PUT /contents` 建首个 commit，第二次起才回到 blob/tree/commit 那条快路。
 
 市场那一步不再靠运气：建仓库时自动补上 `dsh-plugin` topic（模板要求，缺了 PR 会被退），开 PR 前先把 fork 同步到上游，分支已存在就复用、条目已存在就带 `sha` 覆盖——重跑一次不会 422。
@@ -416,7 +418,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 189 个单测
+node --test                      # 191 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

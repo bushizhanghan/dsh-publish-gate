@@ -2748,3 +2748,11 @@ test('planRelease creates a CHANGELOG when there is none', () => {
   assert.match(plan.changes[1].text, /^# Changelog\n\n## 0\.0\.2/)
   rmSync(dir, { recursive: true, force: true })
 })
+
+test('a version lookup never treats a failed request as "not published"', async () => {
+  const { registryVersion } = await import('../lib/engine.js')
+  const bad = await registryVersion('not a name', '1.0.0')
+  assert.equal(bad.unknown, true)
+  const unreachable = await registryVersion('@me/pkg', '1.0.0', { registry: 'http://127.0.0.1:9', timeoutMs: 1500 })
+  assert.equal(unreachable.unknown, true)
+})
