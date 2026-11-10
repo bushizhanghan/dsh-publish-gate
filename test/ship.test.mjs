@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MARKET_MIN_REPO_AGE_MS, decidePublish, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, decidePublish, marketPrState, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -408,4 +408,25 @@ test('republishing the same bytes is a no-op, different bytes is a conflict', ()
   // Unknown on either side is not a reason to block a publish.
   assert.equal(decidePublish('', { exists: true, shasum: 'bbb' }), 'publish')
   assert.equal(decidePublish('aaa', { unknown: true }), 'publish')
+})
+
+test('a listing is not done when the PR is opened, so its state is read back', async () => {
+  const calls = []
+  const transport = async (url) => {
+    calls.push(url)
+    if (/\/pulls\/42$/.test(url)) return { ok: true, status: 200, data: { state: 'open', merged: false, title: 'Add me' } }
+    if (/issues\/42\/comments$/.test(url)) return { ok: true, status: 200, data: [{ user: { login: 'reviewer' }, created_at: '2026-11-01', body: 'Please\nn\nname the upstream fork.' }] }
+    return { ok: false, status: 404 }
+  }
+  const out = await marketPrState('t', 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/42', { transport })
+  assert.equal(out.known, true)
+  assert.equal(out.number, 42)
+  assert.equal(out.merged, false)
+  assert.equal(out.lastComment.from, 'reviewer')
+  assert.equal(out.lastComment.body, 'Please n name the upstream fork.')
+  assert.equal(calls.length, 2)
+
+  const empty = await marketPrState('t', '', { transport })
+  assert.equal(empty.known, false)
+  assert.match(empty.why, /no pull request url/)
 })

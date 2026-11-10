@@ -40,6 +40,8 @@ entry: lib/index.js
 repository: you/cool-plugin
 market gate: opens 2026-11-11T09:12:00.000Z (about 3h)
 npm: not published yet (latest 0.2.9)
+market PR: #9907 merged — this plugin is in the catalogue
+reviewer fkysly: v1.2.7 的 GitHub release 已发（latest 解析到 v1.2.7，资产 200）…
 tokens: npm ok, github ok
 ```
 
@@ -418,7 +420,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 191 个单测
+node --test                      # 192 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

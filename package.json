@@ -1,6 +1,6 @@
 {
   "name": "@bushizhanghan/dsh-publish-gate",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "description": "Pre-publish gate for DSH plugins: manifest, dependencies, artifact, runtime, browser half, traceability and market readiness — plus an input fuzzer that drives every declared parameter with the wrong type. 发布前的七层门禁 + 入参模糊测试。",
   "type": "module",
   "main": "lib/index.js",

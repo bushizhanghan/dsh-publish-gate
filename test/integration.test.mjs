@@ -292,6 +292,11 @@ try {
     'ship without an npm token asks for one instead of publishing',
     noToken.ok === false && (noToken.needs || []).some((n) => n.key === 'npmToken') && noToken.verified === false,
   ])
+  results.push([
+    'status can be asked about a specific catalogue pull request',
+    Boolean(registry.get('publish_gate_status')?.parameters?.properties?.pr),
+  ])
+
   // Proving the bytes is its own step: a preview must not pretend it verified
   // anything, and the step list has to name it or the step can never run.
   const preview = await shipTool.execute({ dir: HERE.replace(/\/test\/?$/, ''), steps: ['check', 'git', 'npm', 'verify'] }, { signal: undefined })

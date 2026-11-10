@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.0
+
+- `publish_gate_status` 现在回答「我的条目到底进市场了没有」：读回记录的 PR，给出 `open` / `merged` / `closed`，并把最后一条审阅评论原文摘出来。开 PR 不是终点，合并才是；以前这件事只能靠打开 github.com 手看。
+- 新增 `marketPrState(token, prUrl)`，可传 `pr` 参数直接查任意一个目录 PR（本机没记录过的也行）。实测 #9907：`merged — this plugin is in the catalogue`，评论来自 fkysly。
+
 ## 0.45.0
 
 - 重跑 `ship` 不再被 npm 的 E403 判成失败：发布前先查 registry 这个版本存不存在，字节相同就记成「已经在线上、无需重发」，字节不同就明确拦住并让你改版本号。原先一次成功的发布之后重跑，看起来像出错。
