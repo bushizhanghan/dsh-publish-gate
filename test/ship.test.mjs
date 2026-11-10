@@ -184,3 +184,9 @@ test('npmPublish never puts the token in argv', async () => {
   assert.equal(seen.args.includes('npm_secret'), false)
   assert.equal(seen.env.NODE_AUTH_TOKEN, 'npm_secret')
 })
+
+test('the plugin declares the credential service it reads', async () => {
+  const mod = await import('../lib/index.js')
+  assert.ok(mod.inject.includes('credentials'), 'without this the store may not exist yet when the tools run')
+  assert.ok(mod.inject.includes('tools'))
+})

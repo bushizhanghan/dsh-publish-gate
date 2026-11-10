@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.35.1
+
+0.35.0 read `ctx.credentials` but never declared it. Cordis resolves services off the context, so
+on a host that registers the store while plugins are loading, the three new tools would have reported
+"no credential store" and asked for the tokens again — the one thing this feature exists to avoid.
+The plugin now declares `credentials` in `inject`, and a test asserts it stays declared.
+
 ## 0.35.0
 
 The gate could tell you a package was fine; it could not get one published. That gap needed a
