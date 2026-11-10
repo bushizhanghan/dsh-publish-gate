@@ -100,6 +100,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `inject-missing-*` | 用了 `ctx.tools` / `ctx.web` / `ctx.webServer` / `ctx.setInterval` 却没在 `inject` 里声明，cordis 永远不激活 |
 | `patch-not-mount` | info：这些顶层 `- id:` 是在覆盖已有条目，合法，但**不是**挂载 |
 | `insert-missing-name` / `insert-name-mismatch` | 挂载名缺失或与 package.json 不一致 |
+| `mount-id-collision` | 这个包要插入的挂载 id 已经被机器上另一个已安装的包装过：宿主只会挂上其中一个，另一个看起来装好了但什么都不做（`llm-workbuddy` 就是这么撞的） |
 | `no-patch-file` | 声明了 `dsh`（即自称是插件包）却既没有 `cordis.patch.yml` 也没有别的 bundle 补丁——装上了，宿主不会挂载它。没有 `dsh` 字段的纯库不在此列（`@deepseek-ai/dsh-atomic-write`、`dsh-tui` 这类从来没有被谁挂载，要求它们交补丁是门禁自己发明规则） |
 | `no-name-export` / `no-apply-export` | 入口协议不完整 |
 | `bin-no-shebang` | `bin` 指向的文件没有 `#!` 行。Windows 上照样能跑，unix 上 shell 会自己执行它，报的是 shell 语法错，看不出真正原因 |
@@ -339,7 +340,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 163 个单测
+node --test                      # 164 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

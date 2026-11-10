@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.33.0
+
+A plugin does not fail loudly when its mount id is already taken. The host inserts both rows,
+keeps one, silently drops the other, and the loser looks installed and does nothing. That is the
+exact objection a market reviewer raised against a fork - and nothing in the gate could see it.
+
+- `mount-id-collision` (error): reads the ids this package claims through its own `insert:` rows
+  and compares them with every other package installed in the profile. Only `insert:` rows count -
+  `patch:` rows address an id that already exists and must not be treated as claiming one.
+- Runs offline against whatever is installed, so it answers "will this collide on *this* machine",
+  which is the only place the answer exists.
+- Found a live one on the first run: `@bushizhanghan/dsh-workmate` and `dsh-workbuddy` both insert
+  `llm-workbuddy`.
+- Two tests were also making live GitHub calls and only passed when the API happened to answer;
+  they now inject `releaseInfo: {}` like the rest. A test that needs the network is a test that
+  fails on a plane.
+
 ## 0.32.0
 
 `readme-tool-undocumented` caught a tool that exists but is never mentioned. The other direction

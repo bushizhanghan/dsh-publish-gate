@@ -23,6 +23,8 @@ import {
   checkBin,
   checkExportsTargets,
   checkPackageJson,
+  checkMountIdCollision,
+  mountIds,
   checkPack,
   diffPack,
   checkPatchYml,
@@ -1077,12 +1079,12 @@ test('market readiness: duplicate entry, npm collision, and a repo younger than 
       { name: 'bushizhanghan/dsh-good', url: 'https://github.com/bushizhanghan/dsh-good', category: 'dev', npm: '@bushizhanghan/dsh-good' },
       { name: 'someone/other', url: 'https://github.com/someone/other', category: 'dev', npm: '@bushizhanghan/dsh-good' },
     ]
-    const rules = (await checkMarketReadiness(dir, { entries, repoInfo: { created_at: new Date().toISOString() } })).map((f) => f.rule)
+    const rules = (await checkMarketReadiness(dir, { entries, repoInfo: { created_at: new Date().toISOString() }, releaseInfo: {} })).map((f) => f.rule)
     assert.ok(rules.includes('market-duplicate-entry'), rules.join(','))
     assert.ok(rules.includes('market-npm-name-collision'), rules.join(','))
     assert.ok(rules.includes('market-repo-too-new'), rules.join(','))
 
-    const clean = await checkMarketReadiness(dir, { entries: [], repoInfo: { created_at: '2020-01-01T00:00:00Z' } })
+    const clean = await checkMarketReadiness(dir, { entries: [], repoInfo: { created_at: '2020-01-01T00:00:00Z' }, releaseInfo: {} })
     assert.deepEqual(clean.map((f) => f.rule), [])
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -1900,7 +1902,7 @@ test('market-fork-of-listed: a plain repo is not treated as a fork', async () =>
   try {
     goodPlugin(dir)
     const repoInfo = { fork: false, created_at: '2026-01-01T00:00:00Z' }
-    const rules = (await checkMarketReadiness(dir, { entries: [], repoInfo })).map((f) => f.rule)
+    const rules = (await checkMarketReadiness(dir, { entries: [], repoInfo, releaseInfo: {} })).map((f) => f.rule)
     assert.deepEqual(rules, [])
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -2025,7 +2027,7 @@ test('a young repo is a warning, not a rule name in the severity slot', async ()
     )
     const findings = await checkMarketReadiness(dir, {
       entries: [],
-      repoInfo: { created_at: new Date(Date.now() - 3_600_000).toISOString(), fork: false, full_name: 'x/young' },
+      repoInfo: { created_at: new Date(Date.now() - 3_600_000).toISOString(), fork: false, full_name: 'x/young' }, releaseInfo: {},
     })
     const tooNew = findings.find((f) => f.rule === 'market-repo-too-new')
     assert.ok(tooNew, 'the rule fires')
@@ -2078,7 +2080,7 @@ test('a GitHub release that lags package.json is a warning', async () => {
         repository: { type: 'git', url: 'git+https://github.com/x/rel.git' },
       }),
     )
-    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false } }
+    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false }, releaseInfo: {} }
     const behind = await checkMarketReadiness(dir, { ...base, releaseInfo: { tag_name: 'v1.2.6' } })
     const found = behind.find((f) => f.rule === 'market-release-behind')
     assert.ok(found, 'the rule fires')
@@ -2133,7 +2135,7 @@ test('an unreadable releases API is not a release that matches', async () => {
         repository: { type: 'git', url: 'git+https://github.com/x/rel2.git' },
       }),
     )
-    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false } }
+    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false }, releaseInfo: {} }
     const findings = await checkMarketReadiness(dir, { ...base, releaseUnavailable: 'HTTP 500' })
     const found = findings.find((f) => f.rule === 'market-release-unverified')
     assert.ok(found, 'the rule fires')
@@ -2664,5 +2666,28 @@ test('a README that advertises a tool nobody registers is called out', () => {
   assert.ok(rules.includes('readme-tool-stale'), 'a name that no longer exists is the point of this rule')
   assert.ok(rules.includes('readme-tool-undocumented'), 'gate_y is registered and not mentioned')
   assert.deepEqual(checkReadmeTruth(dir, ['gate_x', 'gate_old']), [], 'both names exist, nothing to say')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('two packages inserting the same mount id is an error, patch rows are not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-mount-'))
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ name: '@me/chat-ui', version: '1.0.0', type: 'module', dsh: { bundle: { patch: 'cordis.patch.yml' } } }),
+  )
+  writeFileSync(
+    join(dir, 'cordis.patch.yml'),
+    ['- patch:', '    - id: some-host-service', '- insert:', '    - id: chat-ui', "      name: '@me/chat-ui'", ''].join('\n'),
+  )
+  assert.deepEqual(mountIds(dir), ['chat-ui'], 'only insert: rows claim an id')
+
+  const clash = checkMountIdCollision(dir, { installed: [{ id: 'chat-ui', name: '@other/plugin' }] })
+  assert.equal(clash.length, 1)
+  assert.equal(clash[0].severity, 'error')
+  assert.match(clash[0].title, /already claimed by @other\/plugin/)
+
+  // the same package appears twice in a profile all the time; that is not a collision
+  assert.deepEqual(checkMountIdCollision(dir, { installed: [{ id: 'chat-ui', name: '@me/chat-ui' }] }), [])
+  assert.deepEqual(checkMountIdCollision(dir, { installed: [{ id: 'other', name: '@other/plugin' }] }), [])
   rmSync(dir, { recursive: true, force: true })
 })
