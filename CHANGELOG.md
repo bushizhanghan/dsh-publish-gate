@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.36.0
+
+`publish_gate_ship` defaulted to running the first four steps, then treated a *planned* npm step as
+a passing one: `ok: true` on a run that published nothing. The two things that leaves wrong are
+"did it actually publish" and "what does it still need from me".
+
+- `confirm: true` now gates **everything that leaves your machine** — repo, push, npm, market — not
+  just npm and market. Pushing code into a public repository is the same class of act.
+- The default is all six steps; without `confirm` the outward five are listed as `planned` and
+  `published` stays false. `ok` still means "nothing failed", so planning is not an error.
+- Missing credentials come back as `needs: [{key, why, ask}]` instead of only a sentence buried in
+  a step detail, and a missing npm token is caught before npm sees it.
+- `~/.dsh/dsh-publish-gate/state.json` remembers what was shipped (version, repo, pull request),
+  so `publish_gate_status` can say "you already shipped 0.35.1". No tokens are stored there.
+
 ## 0.35.1
 
 0.35.0 read `ctx.credentials` but never declared it. Cordis resolves services off the context, so

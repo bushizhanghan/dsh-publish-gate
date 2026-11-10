@@ -50,7 +50,17 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["check", "git", "repo", "push"]
 publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true, category: "tools", en: "...", zh: "..." })
 ```
 
-默认只跑前四步（不改外部世界）。`confirm: true` 才允许 `npm publish` 和市场 PR。哪一步失败就停在那一页，把真实原因抄给你；修完重跑会接着往下走。
+默认跑全部六步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
+
+哪一步失败就停在那一页，把真实原因抄给你；修完重跑会接着往下走（`steps` 传子集即可）。结果里 `published` 只在 npm 真的跑过并返回 0 时为 true，`planned` 列出被跳过的那几步。
+
+缺东西时它不是甩一句报错，而是给出**要问用户什么**：
+
+```json
+{ "needs": [{ "key": "githubToken", "why": "creating the repository and opening the pull request both need it", "ask": "a GitHub token with repo scope; it is stored once and never shown again" }] }
+```
+
+发过一次之后，它记着：`publish_gate_status` 会多一行 `last shipped: 0.35.1 at 2026-11-10T09:58:00.000Z -> <PR 链接>`。这条记录在 `~/.dsh/dsh-publish-gate/state.json`，只有版本/仓库/PR 链接，**没有 token**。
 
 **最早什么时候能进市场？** 市场那边有一道硬门：**仓库必须建满一天**。所以 `publish_gate_ship` 的返回里带 `eta`：
 
@@ -390,7 +400,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 177 个单测
+node --test                      # 181 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

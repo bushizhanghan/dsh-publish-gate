@@ -3,19 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import {
-  MARKET_MIN_REPO_AGE_MS,
-  ensureRepo,
-  gh,
-  marketEntry,
-  marketEta,
-  npmPublish,
-  openMarketPR,
-  pushWorktree,
-  saveSecrets,
-  secretState,
-  worktreeFiles,
-} from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, ensureRepo, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -189,4 +177,102 @@ test('the plugin declares the credential service it reads', async () => {
   const mod = await import('../lib/index.js')
   assert.ok(mod.inject.includes('credentials'), 'without this the store may not exist yet when the tools run')
   assert.ok(mod.inject.includes('tools'))
+})
+
+async function toolCtx(tools) {
+  const ctx = {
+    tools: { register: (t) => tools.push(t) },
+    on() {},
+    effect() {},
+    setInterval() {},
+    setTimeout() {},
+    log() {},
+    credentials: {
+      _m: new Map(),
+      async set(ref, value) { this._m.set(ref, value) },
+      async resolve(ref) { return this._m.get(ref) || '' },
+      async unset(ref) { this._m.delete(ref) },
+    },
+  }
+  const mod = await import('../lib/index.js')
+  await mod.apply(ctx, {})
+  return ctx
+}
+
+function fixturePlugin(dir) {
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({
+    name: '@me/ship-fixture',
+    version: '1.0.0',
+    type: 'module',
+    description: 'fixture',
+    files: ['lib', 'cordis.patch.yml', 'README.md'],
+    exports: { '.': './lib/index.js' },
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+    repository: { type: 'git', url: 'git+https://github.com/me/ship-fixture.git' },
+  }, null, 2) + '\n')
+  mkdirSync(join(dir, 'lib'), { recursive: true })
+  writeFileSync(join(dir, 'lib', 'index.js'), "export const name = 'ship-fixture'\nexport const inject = []\nexport function apply() {}\n")
+  writeFileSync(join(dir, 'cordis.patch.yml'), "- insert:\n    - id: ship-fixture\n      name: '@me/ship-fixture'\n")
+  writeFileSync(join(dir, 'README.md'), '# ship-fixture\n\nA fixture.\n')
+  writeFileSync(join(dir, 'LICENSE'), 'MIT\n')
+}
+
+test('without confirm nothing leaves the machine', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-ship-'))
+  fixturePlugin(dir)
+  const tools = []
+  await toolCtx(tools)
+  const ship = tools.find((t) => t.name === 'publish_gate_ship')
+  const res = await ship.execute({ dir, steps: ['check', 'npm', 'market'] })
+  assert.equal(res.published, false)
+  assert.deepEqual(res.planned, ['npm', 'market'])
+  assert.equal(res.ok, true, 'planning is not a failure')
+  assert.match(res.next, /confirm: true/)
+  const npmStep = res.steps.find((x) => x.step === 'npm')
+  assert.equal(npmStep.planned, true)
+  assert.match(npmStep.detail, /planned/)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('a missing npm token is named, not turned into an npm error', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-ship2-'))
+  fixturePlugin(dir)
+  const tools = []
+  await toolCtx(tools)
+  const ship = tools.find((t) => t.name === 'publish_gate_ship')
+  const res = await ship.execute({ dir, steps: ['npm'], confirm: true })
+  assert.equal(res.ok, false)
+  const npmStep = res.steps.find((x) => x.step === 'npm')
+  assert.match(npmStep.detail, /no npm token/)
+  assert.equal(res.published, false)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('recordShip remembers what was shipped, per package', () => {
+  const home = mkdtempSync(join(tmpdir(), 'pg-home-'))
+  assert.deepEqual(readShipState(home), {}, 'nothing recorded yet')
+  assert.equal(recordShip({ name: '@me/a', version: '1.0.0', repo: 'me/a' }, home).ok, true)
+  assert.equal(recordShip({ name: '@me/b', version: '2.0.0' }, home).ok, true)
+  assert.equal(recordShip({ name: '@me/a', version: '1.0.1' }, home).ok, true)
+  const state = readShipState(home)
+  assert.equal(state['@me/a'].version, '1.0.1', 'a new ship updates the same entry')
+  assert.equal(state['@me/a'].repo, 'me/a', 'and keeps what was known before')
+  assert.match(state['@me/a'].at, /^\d{4}-\d{2}-\d{2}T/)
+  assert.equal(state['@me/b'].version, '2.0.0')
+  assert.equal(recordShip({}, home).ok, false, 'no name, nothing to record')
+  rmSync(home, { recursive: true, force: true })
+})
+
+test('a missing token is returned as a question, not just a sentence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-ship3-'))
+  fixturePlugin(dir)
+  const tools = []
+  await toolCtx(tools)
+  const ship = tools.find((t) => t.name === 'publish_gate_ship')
+  const res = await ship.execute({ dir, steps: ['repo'], confirm: true })
+  assert.equal(res.ok, false)
+  assert.equal(res.needs.length, 1)
+  assert.equal(res.needs[0].key, 'githubToken')
+  assert.match(res.needs[0].ask, /stored once/)
+  rmSync(dir, { recursive: true, force: true })
 })
