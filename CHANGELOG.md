@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.47.0
+
+- 不再硬要一个 npm token：`ship` 现在先问 `npm whoami`（`npm publish` 本来就靠 `~/.npmrc`），只在机器真的没登录时才说 `needs npmToken`。原来在一台能从 shell 发布二十个版本的机器上，`status` 依然写「npm missing」。
+- 顺手修掉 `chainState` 的一个假话：没有 GitHub token 时它连 npm 都不查，`status` 于是回答「not published yet (latest none)」。npm 是公开数据，跟 GitHub 凭据无关；现在只有仓库查询需要 token，registry 500 也如实报 `unreachable` 而不是「还没发布」。
+- 测试不能再往真 registry 上试发布：`ship` 的两个用例把 `NPM_CONFIG_USERCONFIG` 指向空文件，模拟没登录的机器。
+
 ## 0.46.0
 
 - `publish_gate_status` 现在回答「我的条目到底进市场了没有」：读回记录的 PR，给出 `open` / `merged` / `closed`，并把最后一条审阅评论原文摘出来。开 PR 不是终点，合并才是；以前这件事只能靠打开 github.com 手看。

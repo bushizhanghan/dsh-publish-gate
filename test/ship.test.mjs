@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MARKET_MIN_REPO_AGE_MS, decidePublish, marketPrState, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, chainState, decidePublish, marketPrState, npmIdentity, ensureRepo, ensureRepositoryField, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -234,13 +234,22 @@ test('without confirm nothing leaves the machine', async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('a missing npm token is named, not turned into an npm error', async () => {
+test('a missing npm login is named, not turned into an npm error', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pg-ship2-'))
   fixturePlugin(dir)
   const tools = []
   await toolCtx(tools)
   const ship = tools.find((t) => t.name === 'publish_gate_ship')
-  const res = await ship.execute({ dir, steps: ['npm'], confirm: true })
+  // npm publish reads ~/.npmrc, so a machine that is logged in would really try to
+  // publish this fixture. Point npm at an empty userconfig so the identity check
+  // fails the way it does on a fresh machine, and the error stays a message.
+  writeFileSync(join(dir, '.npmrc'), '')
+  const before = process.env.NPM_CONFIG_USERCONFIG
+  process.env.NPM_CONFIG_USERCONFIG = join(dir, ".npmrc")
+  const res = await ship.execute({ dir, steps: ['npm'], confirm: true }).finally(() => {
+    if (before === undefined) delete process.env.NPM_CONFIG_USERCONFIG
+    else process.env.NPM_CONFIG_USERCONFIG = before
+  })
   assert.equal(res.ok, false)
   const npmStep = res.steps.find((x) => x.step === 'npm')
   assert.match(npmStep.detail, /no npm token/)
@@ -429,4 +438,30 @@ test('a listing is not done when the PR is opened, so its state is read back', a
   const empty = await marketPrState('t', '', { transport })
   assert.equal(empty.known, false)
   assert.match(empty.why, /no pull request url/)
+})
+test('npm identity is read from the shell, not demanded as a secret', async () => {
+  const ok = await npmIdentity({ run: async () => ({ ok: true, user: 'bushizhanghan' }) })
+  assert.deepEqual(ok, { ok: true, user: 'bushizhanghan' })
+  const no = await npmIdentity({ run: async () => ({ ok: false, why: 'not logged in' }) })
+  assert.equal(no.ok, false)
+})
+
+test('chainState asks npm even when there is no GitHub token', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-chain-'))
+  try {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@me/known', version: '2.0.0', main: 'lib/index.js' }))
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(join(dir, 'lib', 'index.js'), 'export const name = 1\n')
+    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ 'dist-tags': { latest: '2.0.0' }, versions: { '2.0.0': {} } }) })
+    const withToken = await chainState('t', dir, { fetchImpl, transport: async () => ({ ok: false, status: 404 }) })
+    assert.equal(withToken.published.hasThisVersion, true)
+    // No token at all: the repository stays unknown, npm does not.
+    const noToken = await chainState('', dir, { fetchImpl })
+    assert.equal(noToken.repo, null)
+    assert.equal(noToken.published.hasThisVersion, true)
+    const broken = await chainState('', dir, { fetchImpl: async () => ({ ok: false, status: 503 }) })
+    assert.equal(broken.published.unreachable, true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

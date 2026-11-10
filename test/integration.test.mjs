@@ -287,7 +287,16 @@ try {
     'ship declares the registry wait and reports whether it proved the bytes',
     typeof shipParams.waitMs === 'object' && typeof shipParams.skipPack === 'object',
   ])
-  const noToken = await shipTool.execute({ dir: HERE.replace(/\/test\/?$/, ''), steps: ['npm'], confirm: true }, { signal: undefined })
+  // A logged-in machine would really publish here; force npm to look unauthenticated.
+  const npmrc = join(HERE, '.npmrc-empty')
+  writeFile(npmrc, '')
+  const beforeRc = process.env.NPM_CONFIG_USERCONFIG
+  process.env.NPM_CONFIG_USERCONFIG = npmrc
+  const noToken = await shipTool.execute({ dir: HERE.replace(/\/test\/?$/, ''), steps: ['npm'], confirm: true }, { signal: undefined }).finally(() => {
+    if (beforeRc === undefined) delete process.env.NPM_CONFIG_USERCONFIG
+    else process.env.NPM_CONFIG_USERCONFIG = beforeRc
+    try { rmSync(npmrc, { force: true }) } catch {}
+  })
   results.push([
     'ship without an npm token asks for one instead of publishing',
     noToken.ok === false && (noToken.needs || []).some((n) => n.key === 'npmToken') && noToken.verified === false,

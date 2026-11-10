@@ -42,7 +42,7 @@ market gate: opens 2026-11-11T09:12:00.000Z (about 3h)
 npm: not published yet (latest 0.2.9)
 market PR: #9907 merged — this plugin is in the catalogue
 reviewer fkysly: v1.2.7 的 GitHub release 已发（latest 解析到 v1.2.7，资产 200）…
-tokens: npm ok, github ok
+tokens: npm logged in as your-name, github ok
 ```
 
 **然后跑链子：**
@@ -59,6 +59,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 带了 `confirm: true` 且 `package.json` 里没有 `repository` 时，`repo` 这一步会顺手把仓库地址写进去：没有这一行，npm 上的包没有源码链接，之后每次 `status` 也只会回答「还没上 GitHub」。只在仓库这一步真要执行时才写，纯预览不会动你的文件。
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
+
+npm 不需要你交 token：`npm publish` 读的是 `~/.npmrc`，所以只要那台机器 `npm whoami` 认得你，`ship` 就直接发。只有 `npm whoami` 也失败时它才会向你要 `NPM_TOKEN`。`status` 的 `tokens:` 行会写清楚是 `npm logged in as <你>` 还是 `npm missing`。
 
 重跑一次链子不会变成失败：某个版本已经在 npm 上了，`npm publish` 会回 E403「cannot publish over」，这句话既不说明字节一样也不说明不一样。现在发之前先问 registry 这个版本存不存在——**字节一样就当作没事发生**（记 `this exact version is already on the registry with these bytes`），**字节不同就直接拦住**，告诉你「这个版本已经有别的字节了，改版本号，别覆盖」。这才是「重跑能接着走」的真实含义。
 
@@ -420,7 +422,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 192 个单测
+node --test                      # 194 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
