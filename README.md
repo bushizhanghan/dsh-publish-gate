@@ -4,7 +4,7 @@
 >
 > 发布一个 DSH 插件有七步，每一步都有一个**直到你付出代价才说话的坑**：`files` 忘了 `lib/` 于是发出去一个空包、PowerShell 写下的 BOM 让 `JSON.parse` 报一个不提 BOM 的错、patch 的 insert 行缩进错了于是插件装上了但**永远不加载**、裸包名让 granular token 收到一个既不说 token 也不说 scope 的 403。这个插件把整条链路的每个静默坑变成一条确定性检查。
 
-十个 agent 工具：全量门禁、运行时注册检查、发后校验、patch 专项、市场条目校验、版本推进、多插件体检、发布命令清单、本地开发链路诊断。
+十四个 agent 工具：全量门禁、运行时注册检查、发后校验、patch 专项、市场条目校验、版本推进、多插件体检、发布命令清单、本地开发链路诊断、装前试跑、CI 模板、更新前预检、机械修复。
 
 门禁分三层：**清单层**看 package.json / patch / 入口源码，**产物层**真的跑一遍 `npm pack --dry-run` 看 npm 到底会发出什么，**运行时层**在独立子进程里 `import()` 入口并 `apply(ctx)` 一遍，看它到底注册了什么。
 
@@ -15,6 +15,26 @@
 ### 测试层：门禁真的会跑一遍你的测试
 
 `tests-fail` / `tests-timeout` / `tests-not-run` 三条规则会以 `node --test` 在插件目录里真跑一次（不经过 `npm test`，因为脚本内容由作者决定、可能 shell 出去）。子进程会去掉继承来的 `NODE_TEST_CONTEXT`——否则当门禁本身跑在 `node --test` 里时，子进程进入 test-child 模式、一个摘要都不打印，看起来像"没有测试"。
+
+## 📮 提建议 / 报问题 / 说它判错了
+
+**这个插件最想要的反馈是「你判错了」。** 它全部的价值就是一句绿色的结论可信；任何一条规则把好包判成坏包、或者放过一个坏包，都比缺十个功能严重。
+
+| 你想说的 | 请带上什么 |
+|---|---|
+| **误报**：这条规则不该出现 | `publish_gate(dir, { format: "markdown" })` 的整段输出 + 你的仓库地址 |
+| **漏报**：我的插件踩了坑它没说话 | 那次发布失败时的**原始报错**，和你的插件目录 |
+| **建议**：还该查什么 | 你发布时最怕、现在还得靠人肉记着的那一步 |
+
+三个入口，按顺手程度排：
+
+1. **GitHub Issues（推荐）** — <https://github.com/bushizhanghan/dsh-publish-gate/issues>，`误报 / 漏报` 模板就是照上面那张表问的。
+2. **直接对 agent 说** — 把仓库路径给我，我拿 `publish_gate` 复现一遍，比你描述快。
+3. **市场条目**下的讨论区。
+
+说你踩过的坑，会被做成 `test/corpus.test.mjs` 里的一个固定用例（现在那六个用例就是 `@liustack/modlens`、`@michengai/dsh-codex-ui`、`@tt-a1i/archify-dsh` 这些真实包装出来的）——**同一条误报不会犯第二次**，这是这个插件唯一真正的进步方式。
+
+**先说清楚不做的**（免得你提了我只能拒）：不自动改你的代码、不自动 bump 版本、不自动发 npm、不假装能在 CI 里跑完整门禁。`publish_gate_fix` 例外——它只做「这条规则只有一个正确答案」的那两类清单修复，而且默认 dry-run，见下面的设计取舍。
 
 ## 典型用法（写完插件后）
 
@@ -31,7 +51,7 @@
 ```sh
 dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ```
-重启 DSH 后生效。**只读**：这个插件从不写你的插件目录。
+重启 DSH 后生效。**只读**：除 `publish_gate_fix` 在你显式传 `apply: true` 时改 `package.json` 里那两类机械修复之外，这个插件从不写你的插件目录——不碰 `lib/`、不碰版本、不碰依赖。
 
 ## Agent 工具
 
@@ -49,6 +69,7 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_smoke` | **装之前最接近真装的一次检查**：把 registry 上那个 tarball 下下来，解到 **profile 自己的 node_modules 里**（所以它的裸 import 会照真实依赖解析，而不是在系统临时目录里报 ERR_MODULE_NOT_FOUND）、import 入口、`apply(ctx)` 一遍，报注册了什么、有没有抛。跑完自己清干净 |
 | `publish_gate_ci` | 生成 `.github/workflows/publish-gate.yml`：CI 能真做的两件事——跑测试、以及校验 tarball 里到底有没有解析出来的入口文件和 `cordis.patch.yml`。**不假装**能在 runner 上跑完整门禁（那里没有 profile、没有宿主、也进不去你的 npm scope） |
 | `publish_gate_update` | **装之前先回答该不该装**。市场里的更新插件都是装完起不来才回滚；这个先把 registry 上那个版本真的下载下来、解包到临时目录，跑同一套产物层与运行时层：入口能不能 import、`apply()` 能不能注册、tarball 里有没有代码、参数传错会不会抛。只在 checkout 里才有意义的规则（git / 市场 / 测试 / 链接）会被过滤掉，结论只关于代码。传 `dir` 或 `name` 都行（只给包名时从已装副本读当前版本） |
+| `publish_gate_fix` | 只做「规则只有一个正确答案」的那两类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）。**默认 dry-run**，只说改哪几处、为什么；`apply: true` 才写回 `package.json`。代码、版本、依赖一律不碰 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
 ## 检查清单
@@ -311,7 +332,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 149 个单测
+node --test                      # 151 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

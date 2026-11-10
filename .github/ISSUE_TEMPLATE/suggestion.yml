@@ -1,0 +1,42 @@
+name: 误报 / 漏报 / 建议
+description: 门禁判错了哪一条，或者漏掉了哪一次发布失败
+title: "[gate] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个插件全部的价值就是一句绿色的结论可信。**误报（好包被判坏包）比缺功能严重得多**，请直接报。
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 是哪一类
+      options:
+        - 误报：某条规则不该出现
+        - 漏报：我的插件踩了坑，门禁没说话
+        - 建议：还该查什么
+        - 工具本身出错（报错、卡住、结果自相矛盾）
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: publish_gate 的输出
+      description: 跑 `publish_gate(dir, { format: "markdown" })`，把整段贴进来
+      render: markdown
+    validations:
+      required: true
+  - type: input
+    id: repo
+    attributes:
+      label: 插件仓库地址
+      placeholder: https://github.com/you/your-dsh-plugin
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 为什么这条判断是错的
+      description: 对漏报，请贴那次发布失败时的**原始报错**——它比任何描述都有用
+    validations:
+      required: true

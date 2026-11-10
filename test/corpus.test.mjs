@@ -4,13 +4,16 @@
 // rather than on someone else's plugin.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
   buildGateWorkflow,
+  applyFixes,
   checkPackageJson,
+  checkTraceability,
+  planFixes,
   checkPublishIdentity,
   checkTests,
   checkEntrySource,
@@ -212,4 +215,67 @@ test('a tarball with a symlink member is refused, a dotted filename is not', () 
     'lrwxrwxrwx  0 0 0   6 Jun  1 00:00 package/link -> ../x',
   )
   assert.equal(unsafeTarLink('-rw-r--r--  0 0 0  12 Jun  1 00:00 package/a.js'), null)
+})
+
+test('corpus: planFixes proposes only the manifest edits it can defend', () => {
+  const dir = fixture((d) => {
+    mkdirSync(join(d, 'lib'), { recursive: true })
+    writeFileSync(join(d, 'lib', 'index.js'), 'export const name = "x"\n')
+    writeFileSync(join(d, 'cordis.patch.yml'), '- insert: []\n')
+    writeFileSync(
+      join(d, 'package.json'),
+      JSON.stringify({
+        name: '@acme/thing',
+        version: '1.0.0',
+        type: 'module',
+        main: 'lib/index.js',
+        files: ['lib'],
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }),
+    )
+  })
+  try {
+    const plan = planFixes(dir)
+    assert.deepEqual(
+      plan.changes.map((c) => c.kind),
+      ['publishConfig.access', 'files'],
+    )
+    assert.equal(plan.changes[1].add, 'cordis.patch.yml')
+
+    const preview = applyFixes(dir, { dryRun: true })
+    assert.equal(preview.applied, false)
+    assert.equal(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).publishConfig, undefined)
+
+    const done = applyFixes(dir, { dryRun: false })
+    assert.equal(done.applied, true)
+    const after = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    assert.equal(after.publishConfig.access, 'public')
+    assert.deepEqual(after.files, ['lib', 'cordis.patch.yml'])
+
+    assert.equal(planFixes(dir).changes.length, 0, 'a second run has nothing left to do')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('corpus: a plugin inside a monorepo sees its own dirty files', async () => {
+  const dir = fixture((d) => {
+    writeFileSync(join(d, 'package.json'), JSON.stringify({ name: 'acme-thing', version: '1.0.0' }))
+  })
+  try {
+    const status = ' M sub/lib/index.js\n'
+    const mine = await checkTraceability(dir, { status, prefix: 'sub/', packFiles: ['lib/index.js'], remote: null })
+    assert.ok(
+      mine.some((f) => f.rule === 'git-uncommitted'),
+      'git prints repository-root paths, so the prefix has to be stripped before comparing',
+    )
+    const other = await checkTraceability(dir, { status, prefix: 'other/', packFiles: ['lib/index.js'], remote: null })
+    assert.equal(
+      other.some((f) => f.rule === 'git-uncommitted'),
+      false,
+      'a dirty file outside this package is not this package\'s problem',
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

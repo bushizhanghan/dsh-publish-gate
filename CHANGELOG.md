@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.26.0
+
+Nothing new to detect. This release makes the gate answerable — where to argue with it, and what
+it can repair without being asked to think.
+
+- **A feedback section at the top of the README**, because a gate whose false positives are never
+  reported stays wrong forever. It asks for the two things that are actually useful: the markdown
+  output of a rule you think is wrong, and the original error from a publish that broke in a way
+  the gate did not mention. Every reported shape becomes a fixed case in `test/corpus.test.mjs`.
+- **`publish_gate_fix`**: the mechanical half, and only that half. It sets `publishConfig.access`
+  for a scoped name (npm publishes it as restricted otherwise, and the error names neither the
+  setting nor the scope) and adds the missing entry directory or mount patch to an **existing**
+  `files` list. Dry run by default. It never creates a `files` list, never touches code, versions
+  or dependencies: every other finding stays a finding.
+- **`git-uncommitted` was blind inside a monorepo.** `git status --porcelain` prints paths
+  relative to the *repository* root even when git runs in a subdirectory, so a plugin that lives in
+  a monorepo compared its tarball paths against names it never contained and reported nothing. The
+  output is now rebased on `git rev-parse --show-prefix`.
+- `renderMarkdown` ended without a newline when there was nothing to report.
+
 ## 0.25.1
 
 An independent review of 0.25.0 found six real defects. All fixed; no rule was added.
