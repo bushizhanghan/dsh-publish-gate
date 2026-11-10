@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.38.0
+
+Five arguments that used to be quietly reinterpreted.
+
+- `publish_gate_next_version({ bump: 123 })` bumped `patch` and reported success. A wrong bump is now refused.
+- `publish_gate_commands({ owner: 123 })` interpolated the number into GitHub URLs. It must be a non-empty string.
+- `publish_gate_setup({ npmToken: 123 })` stored nothing, refused nothing and answered `ok: true`. Tokens and `npmUser`
+  must be non-empty strings, and `forget` must be an array.
+- `publish_gate_tools({ fuzz: "yes" })` fell through to `false`, so the report looked like "nothing throws" when
+  nothing had been called. `fuzz` must be a real boolean.
+- `publish_gate_doctor({ skipPack: "false" })` skipped the tarball because the check was truthy — the same class of bug
+  that made `skipPack: "false"` skip every check in 0.24.0. It now requires `=== true`.
+
+Found by driving all 19 tools with wrong-typed arguments (119 cases); the remaining acceptances are documented
+fallbacks (a non-numeric `timeoutMs` uses the default), not silent reinterpretations.
 ## 0.37.0
 
 Two places where the chain said something it had not checked.

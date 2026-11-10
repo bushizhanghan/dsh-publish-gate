@@ -24,8 +24,31 @@ const registry = new Map()
 const fakeCtx = { tools: { register: (t) => registry.set(t.name, t) } }
 
 const results = []
+
 try {
   apply(fakeCtx, { networkTimeoutMs: 8000 })
+
+// These three used to accept nonsense and answer as if they had understood it:
+// bump: 123 became "patch", owner: 123 became a URL path, and a number for a
+// token was dropped while the reply still said ok.
+{
+  const PKG = HERE.replace(/\/test\/?$/, '')
+  const tool = (n) => registry.get(n)
+  const cases = [
+    ['publish_gate_next_version', { dir: PKG, bump: 123 }, /bump must be one of/],
+    ['publish_gate_commands', { dir: PKG, owner: 123 }, /owner must be a non-empty/],
+    ['publish_gate_setup', { npmToken: 123 }, /npmToken must be a non-empty/],
+    ['publish_gate_setup', { forget: 'npmToken' }, /forget must be an array/],
+    ['publish_gate_tools', { dir: PKG, fuzz: 'yes' }, /fuzz must be true or false/],
+  ]
+  for (const [name, args, want] of cases) {
+    const out = await tool(name).execute(args)
+    if (out.ok !== false || !want.test(out.error || '')) {
+      results.push(['a wrong-typed argument is refused, not silently defaulted: ' + name, false, JSON.stringify(out).slice(0, 200)])
+    }
+  }
+  results.push(['a wrong-typed argument is refused, not silently defaulted', true])
+}
   const call = async (name, args = {}) => registry.get(name).execute(args, { signal: undefined })
 
   const expected = [
