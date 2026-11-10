@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.32.0
+
+`readme-tool-undocumented` caught a tool that exists but is never mentioned. The other direction
+was unchecked: a README that keeps advertising a tool you renamed or deleted, so a reader follows
+the docs into "unknown tool".
+
+- Extracts every identifier under the package's own tool prefix (the longest shared prefix ending
+  in `_`, so `publish_gate_`) and reports the ones that are not registered.
+- Only runs when at least two tools share a prefix - one tool means no prefix, and guessing one
+  from a single name would match unrelated words.
+- Severity `warn`: a stale README is not a broken package, but it is a broken promise.
+
 ## 0.31.0
 
 `publish_gate_drift` compared file **sizes**. That misses the most common silent rebuild: a

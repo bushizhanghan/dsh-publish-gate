@@ -2656,3 +2656,13 @@ test('diffPack sees a change that keeps the size the same', () => {
   // without hashes on one side there is nothing better than size to compare
   assert.deepEqual(diffPack([{ path: 'a.js', size: 1 }], [{ path: 'a.js', size: 1 }]).changed, [])
 })
+
+test('a README that advertises a tool nobody registers is called out', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-readme-'))
+  writeFileSync(join(dir, 'README.md'), 'Call `gate_x` first, then `gate_old` if that fails.\n')
+  const rules = checkReadmeTruth(dir, ['gate_x', 'gate_y']).map((f) => f.rule)
+  assert.ok(rules.includes('readme-tool-stale'), 'a name that no longer exists is the point of this rule')
+  assert.ok(rules.includes('readme-tool-undocumented'), 'gate_y is registered and not mentioned')
+  assert.deepEqual(checkReadmeTruth(dir, ['gate_x', 'gate_old']), [], 'both names exist, nothing to say')
+  rmSync(dir, { recursive: true, force: true })
+})
