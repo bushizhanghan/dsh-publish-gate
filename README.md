@@ -180,13 +180,15 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | 规则 | 抓什么 |
 |---|---|
 | `market-duplicate-entry` | 这个仓库**已经在目录里**。再提一个 PR 就是同一仓库的第二条条目，reviewer 会拒。版本升级根本不需要 PR——目录条目只存 `url` |
-| `market-release-behind` | warn | 最新 GitHub release 比 package.json 旧（或新） | 目录里写着 1.2.7、release 资产还是 1.2.6 时，市场条目装的是旧代码，而描述是新版写的——维护者正是以「描述与 tarball 不符」驳回过一次提交 |
+| `market-release-behind` | 最新 GitHub release 比 package.json 旧（或新）。目录里写着 1.2.7、release 资产还是 1.2.6 时，市场条目装的是旧代码，而描述是新版写的——维护者正是以「描述与 tarball 不符」驳回过一次提交 |
 | `market-npm-name-collision` | 另一个条目也在发同一个 npm 包，安装路径会互相盖 |
 | `market-repo-too-new` | 仓库创建不满 24 小时。门禁会报 `0.0 days old` 然后**自己重跑**，PR 不会丢，但在那之前什么都不会合 |
 | `market-fork-of-listed` | 这个仓库是某个**已经在目录里**的仓库的 fork。两条条目装的代码抢同一批 id，两个都装就有一个被静默盖掉——而且 reviewer 会把"没写"当成"隐瞒 fork" |
 | `market-fork-undisclosed` | 是 fork，但 README 和 package.json 里都没有上游的 `owner/repo` |
 | `market-no-repo` | `package.json` 里没有 GitHub 地址，没东西可提交 |
 | `market-unavailable` | 目录拉不到（warn）——这几条没跑，别把它当干净 |
+| `github-unavailable` | GitHub API 读不到（403 限流 / 5xx / 断网）：仓库年龄、fork 两条、未披露 fork **三条检查全部没跑**，标题里直接写「three market checks did not run」 |
+| `market-release-unverified` | `releases/latest` 读不到（info）。404 不算——那是「这个仓库真的没有 release」，是答案；其余状态码才是「不知道」 |
 
 ### 代码卫生
 
@@ -332,7 +334,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 151 个单测
+node --test                      # 153 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

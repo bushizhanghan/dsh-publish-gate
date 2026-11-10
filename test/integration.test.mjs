@@ -2,7 +2,7 @@
 // against the real published plugins.
 import { apply } from '../lib/index.js'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdtempSync, writeFileSync as writeFile, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync as writeFile, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -38,9 +38,13 @@ try {
     'publish_gate_next_version',
     'publish_gate_doctor',
     'publish_gate_commands',
+    'publish_gate_smoke',
+    'publish_gate_ci',
+    'publish_gate_update',
+    'publish_gate_fix',
     'publish_gate_link',
   ]
-  results.push([`${expected.length} tools registered`, expected.every((n) => registry.has(n))])
+  results.push([`${expected.length} tools registered`, registry.size === expected.length && expected.every((n) => registry.has(n))])
 
   // 1. gate over a real published plugin
   const gate = await call('publish_gate', { dir: sibling('dsh-page-monitor'), skipNetwork: true })
@@ -182,6 +186,61 @@ try {
     ])
   } finally {
     rmSync(profile, { recursive: true, force: true })
+  }
+
+  // 12. A package.json that does not parse is not a missing package.json: the
+  // caller gets the parser's own sentence instead of being sent to look for a
+  // file that is right there.
+  const brokenJson = mkdtempSync(join(tmpdir(), 'pg-badjson-'))
+  try {
+    writeFile(join(brokenJson, 'package.json'), '{ "name": "@x/y", ')
+    const cmds = await call('publish_gate_commands', { dir: brokenJson })
+    results.push([
+      'a package.json that does not parse is named as such',
+      cmds.ok === false && /not valid JSON/.test(String(cmds.error)),
+    ])
+    const nextVersion = await call('publish_gate_next_version', { dir: brokenJson })
+    results.push([
+      'publish_gate_next_version refuses the same way',
+      nextVersion.ok === false && /not valid JSON/.test(String(nextVersion.error)),
+    ])
+  } finally {
+    rmSync(brokenJson, { recursive: true, force: true })
+  }
+
+  // 13. publish_gate_fix: a dry run by default, and it only ever touches the two
+  // things the gate can defend.
+  const fixDir = mkdtempSync(join(tmpdir(), 'pg-fix-'))
+  try {
+    mkdirSync(join(fixDir, 'lib'), { recursive: true })
+    writeFile(join(fixDir, 'lib', 'index.js'), 'export const name = "x"\n')
+    writeFile(join(fixDir, 'cordis.patch.yml'), '- insert: []\n')
+    const pkg = {
+      name: '@acme/fixme',
+      version: '1.0.0',
+      type: 'module',
+      main: 'lib/index.js',
+      files: ['lib'],
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    }
+    writeFile(join(fixDir, 'package.json'), JSON.stringify(pkg))
+    const preview = await call('publish_gate_fix', { dir: fixDir })
+    results.push([
+      'publish_gate_fix is a dry run by default',
+      preview.ok === true && preview.applied === false && preview.changes.length === 2,
+    ])
+    results.push([
+      'publish_gate_fix explains each change',
+      /access = "public"/.test(preview.report) && /cordis\.patch\.yml/.test(preview.report),
+    ])
+    const applied = await call('publish_gate_fix', { dir: fixDir, apply: true })
+    const after = JSON.parse(readFileSync(join(fixDir, 'package.json'), 'utf8'))
+    results.push([
+      'publish_gate_fix writes both fixes when asked',
+      applied.applied === true && after.publishConfig.access === 'public' && after.files.includes('cordis.patch.yml'),
+    ])
+  } finally {
+    rmSync(fixDir, { recursive: true, force: true })
   }
 } catch (error) {
   console.error('UNEXPECTED THROW:', error)

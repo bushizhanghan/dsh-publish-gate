@@ -1091,7 +1091,7 @@ test('market readiness: a package with no GitHub repository cannot be listed', a
   try {
     goodPlugin(dir, { repository: undefined })
     assert.equal(repoSlug(dir), null)
-    assert.ok((await checkMarketReadiness(dir, { entries: [] })).some((f) => f.rule === 'market-no-repo'))
+    assert.ok((await checkMarketReadiness(dir, { entries: [], repoUnavailable: 'no network in tests' })).some((f) => f.rule === 'market-no-repo'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -2087,6 +2087,57 @@ test('a GitHub release that lags package.json is a warning', async () => {
 
     const none = await checkMarketReadiness(dir, { ...base, releaseInfo: {} })
     assert.equal(none.filter((f) => f.rule === 'market-release-behind').length, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// Losing the GitHub call removes three checks at once — repo age and both fork
+// checks. Reporting nothing there reads as "checked and fine", which is exactly
+// how a fork submission reaches a reviewer with its upstream undisclosed.
+test('a blocked GitHub API is reported, not silently skipped', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-gh-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@x/gh',
+        version: '1.0.0',
+        type: 'module',
+        repository: { type: 'git', url: 'git+https://github.com/x/gh.git' },
+      }),
+    )
+    const findings = await checkMarketReadiness(dir, { entries: [], repoUnavailable: 'HTTP 403' })
+    const found = findings.find((f) => f.rule === 'github-unavailable')
+    assert.ok(found, 'the rule fires')
+    assert.equal(found.severity, 'warn')
+    assert.match(found.title, /three market checks/)
+    assert.match(found.detail, /NOT a clean market report/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('an unreadable releases API is not a release that matches', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-rel2-'))
+  try {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@x/rel2',
+        version: '1.2.7',
+        type: 'module',
+        repository: { type: 'git', url: 'git+https://github.com/x/rel2.git' },
+      }),
+    )
+    const base = { entries: [], repoInfo: { created_at: '2026-01-01T00:00:00Z', fork: false } }
+    const findings = await checkMarketReadiness(dir, { ...base, releaseUnavailable: 'HTTP 500' })
+    const found = findings.find((f) => f.rule === 'market-release-unverified')
+    assert.ok(found, 'the rule fires')
+    assert.equal(found.severity, 'info')
+    // 404 is a real answer — this repository has no release at all — so it stays quiet.
+    const none = await checkMarketReadiness(dir, { ...base, releaseInfo: {} })
+    assert.equal(none.filter((f) => f.rule === 'market-release-unverified').length, 0)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

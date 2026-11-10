@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.26.1
+
+Three places where "could not check" was printed as "nothing to report". All three are the same
+mistake the gate exists to catch, so they get the same treatment: say what did not run.
+
+- **A blocked GitHub API silently removed three market checks.** The repo-age check and both fork
+  checks read `GET /repos/:slug`, and a 403 (unauthenticated GitHub allows 60 requests an hour), a
+  5xx or a timeout all landed in an empty `catch`. A fork submission then reached a reviewer with
+  its upstream undisclosed, and the gate had said nothing. Now a warn says *three market checks did
+  not run*, because that is what happened.
+- **An unreadable `releases/latest` looked like a release that matches.** 404 is a real answer
+  (this repository has no release) and stays quiet; every other outcome is now
+  `market-release-unverified` (info) instead of silence.
+- **A `package.json` that does not parse was reported as "no package.json".** `publish_gate_commands`,
+  `publish_gate_next_version` and `publish_gate_verify` now return the parser's own sentence, file
+  and position included, instead of sending the caller to look for a file that is right there.
+- README: the `market-release-behind` row had four cells in a two-column table; both new rules are
+  now documented.
+
 ## 0.26.0
 
 Nothing new to detect. This release makes the gate answerable — where to argue with it, and what
