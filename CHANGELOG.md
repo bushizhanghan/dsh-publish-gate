@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.36.1
+
+- The market step is idempotent: it asks the catalogue for
+  `data/plugins/<owner>__<repo>.yml` first. An entry carries only a url, so a new version needs no
+  second pull request — and re-running ship no longer tries to recreate a branch that already exists.
+  A 500 from GitHub is "could not tell", not "not listed".
+- A repo with no `user.name`/`user.email` fails the git step with git's own sentence; it now says
+  which two commands fix it.
 ## 0.36.0
 
 `publish_gate_ship` defaulted to running the first four steps, then treated a *planned* npm step as

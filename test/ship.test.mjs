@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MARKET_MIN_REPO_AGE_MS, ensureRepo, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip } from '../lib/ship.js'
+import { MARKET_MIN_REPO_AGE_MS, ensureRepo, gh, marketEntry, marketEta, npmPublish, openMarketPR, pushWorktree, saveSecrets, secretState, worktreeFiles, readShipState, recordShip, entryExists } from '../lib/ship.js'
 
 const fakeStore = (seed = {}) => {
   const map = new Map(Object.entries(seed))
@@ -275,4 +275,19 @@ test('a missing token is returned as a question, not just a sentence', async () 
   assert.equal(res.needs[0].key, 'githubToken')
   assert.match(res.needs[0].ask, /stored once/)
   rmSync(dir, { recursive: true, force: true })
+})
+
+test('entryExists tells listed from not listed, and says when it cannot tell', async () => {
+  const three = (status) => (path, init) => Promise.resolve(
+    status === 200
+      ? { ok: true, status: 200, data: { sha: 'abc' } }
+      : { ok: false, status, why: 'HTTP ' + status },
+  )
+  const listed = await entryExists('t', { path: 'data/plugins/me__x.yml', transport: three(200) })
+  assert.deepEqual([listed.ok, listed.exists, listed.sha], [true, true, 'abc'])
+  const missing = await entryExists('t', { path: 'data/plugins/me__x.yml', transport: three(404) })
+  assert.deepEqual([missing.ok, missing.exists], [true, false], '404 is a real answer: not listed')
+  const blocked = await entryExists('t', { path: 'data/plugins/me__x.yml', transport: three(500) })
+  assert.equal(blocked.ok, false, 'a 500 is not "not listed"')
+  assert.match(blocked.why, /could not read the catalogue/)
 })

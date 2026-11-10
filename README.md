@@ -52,6 +52,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 默认跑全部六步，但**只有 `check` 和 `git` 会真的执行**。凡是离开这台机器的动作——建仓库、推代码、`npm publish`、开市场 PR——都标成 `planned`，除非你给 `confirm: true`。推代码到公开仓库和发布到 npm 是一样的事，没有理由只有后者要点头。
 
+市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
+
 哪一步失败就停在那一页，把真实原因抄给你；修完重跑会接着往下走（`steps` 传子集即可）。结果里 `published` 只在 npm 真的跑过并返回 0 时为 true，`planned` 列出被跳过的那几步。
 
 缺东西时它不是甩一句报错，而是给出**要问用户什么**：
