@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.41.0
+
+**The push step could never have worked on a brand-new repository.**
+
+Found by running the chain against real GitHub for the first time (a throwaway repo, since deleted by hand — this
+token has no `delete_repo` scope): `repo` created the repository and set the topics, then `push` died with
+`blob cordis.patch.yml → 409`.
+
+The reason is GitHub's own rule: on a repository with no commits, every git-data endpoint answers 409
+"Git Repository is empty". `POST /git/blobs` was the first call, so the first publish of any new plugin — the
+common case — always failed one step before npm.
+
+`pushWorktree` now treats 409 from the blob call as "this repository has no first commit yet" and hands off to
+`pushByContents`, which writes the tree one file at a time through `PUT /contents` (the only API allowed to make
+the first commit) and reports `method: 'contents'`. From the second push on, the blob/tree/commit path is used again.
+
+Verified live against GitHub: first push into an empty repo returned `ok, method: contents, 3 files`; the second
+push used the normal path; the file was then read back through the API. Unit test covers the 409 hand-off.
 ## 0.40.0
 
 The market step was the one part of the chain I had never run through the plugin.

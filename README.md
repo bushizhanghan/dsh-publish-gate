@@ -54,6 +54,8 @@ publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true
 
 市场那一步是幂等的：条目按仓库路径（`data/plugins/<owner>__<repo>.yml`）查一次，**已经在目录里就不再开 PR**——目录条目只存一个 `url`，换个版本号不需要第二次提交。
 
+空仓库的第一次提交走 Contents API：GitHub 对没有任何 commit 的仓库，所有 git-data 接口一律回 409，所以「刚建好的仓库」根本推不上去。现在遇到 409 就改成一个文件一次 `PUT /contents` 建首个 commit，第二次起才回到 blob/tree/commit 那条快路。
+
 市场那一步不再靠运气：建仓库时自动补上 `dsh-plugin` topic（模板要求，缺了 PR 会被退），开 PR 前先把 fork 同步到上游，分支已存在就复用、条目已存在就带 `sha` 覆盖——重跑一次不会 422。
 
 两个被高估的 error 降成 warn：`no-exports` 和 `no-license` 原来都算 blocker，但它们都不会让插件坏掉——Node 在没有 `exports` 时会回退到 `main`（我用裸 ESM import 实测过），没有 LICENSE 也照发照跑。error 应该只留给「装上去真的会坏」的事。

@@ -352,3 +352,25 @@ test('re-running the market step reuses the branch and replaces the file instead
   assert.ok(seen.includes('body:tip'), 'the branch is created from the fork tip')
   assert.ok(seen.includes('sha:oldsha'), 'the existing file is replaced with its sha')
 })
+
+test('an empty repository commits through the contents API instead of failing on 409', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ship-empty-'))
+  try {
+    mkdirSync(join(dir, 'lib'))
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@me/empty', version: '1.0.0' }))
+    writeFileSync(join(dir, 'lib/index.js'), 'export const name = "empty"' + String.fromCharCode(10))
+    const calls = []
+    const transport = async (path, init) => {
+      calls.push((init.method || 'GET') + ' ' + path.split('/').slice(-2).join('/'))
+      if (path.includes('/git/blobs')) return { ok: false, status: 409, text: 'Git Repository is empty.' }
+      if (path.includes('/contents/')) return { ok: true, status: 201, data: { commit: { sha: 'first' } } }
+      return { ok: false, status: 500, text: 'unexpected ' + path }
+    }
+    const res = await pushWorktree('t', 'me/empty', dir, 'first commit', { transport })
+    assert.equal(res.ok, true)
+    assert.equal(res.method, 'contents')
+    assert.equal(calls.filter((c) => c.startsWith('PUT')).length, 2, 'one PUT per file')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
