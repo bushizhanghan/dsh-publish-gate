@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.35.0
+
+The gate could tell you a package was fine; it could not get one published. That gap needed a
+person with a terminal and a memory for which token went where.
+
+- `publish_gate_setup` takes the npm and GitHub tokens **once** and puts them in the host's own
+  credential store, so every later run reads them instead of asking again. It answers with which
+  references are configured, never with a value.
+- `publish_gate_status` says where this plugin is on the chain: entry file, repository and its age,
+  whether the market gate is open, whether npm already has this version.
+- `publish_gate_ship` runs the chain step by step — check, git, repo, push, npm, market — and stops
+  at the first failure instead of reporting a partial run as success. `npm` and `market` need
+  `confirm: true`; without it they are planned, not executed.
+- The result carries `eta`: the catalogue refuses repositories younger than a day, so "when can this
+  be listed" has an exact answer that is not "whenever".
+- A push bug found by its own test: the branch was moved to `commit.sha` (the response object)
+  instead of `commit.data.sha`, which would have failed on every real upload.
+
 ## 0.34.0
 
 Every release of this plugin (and the nine around it) opened with the same hand-written script:

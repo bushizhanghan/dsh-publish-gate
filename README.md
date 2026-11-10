@@ -16,6 +16,52 @@
 
 `tests-fail` / `tests-timeout` / `tests-not-run` 三条规则会以 `node --test` 在插件目录里真跑一次（不经过 `npm test`，因为脚本内容由作者决定、可能 shell 出去）。子进程会去掉继承来的 `NODE_TEST_CONTEXT`——否则当门禁本身跑在 `node --test` 里时，子进程进入 test-child 模式、一个摘要都不打印，看起来像"没有测试"。
 
+## 🚀 从插件到市场：一条链
+
+前面十七个工具回答「这个包有没有问题」。这一段回答「怎么把它真的发出去」——因为发布里有几步是**你没法交给 linter** 的：建仓库、推代码、发 npm、开市场 PR。
+
+**只需要给一次密钥。** 你说「发布」，agent 先问你要两样东西：
+
+```
+publish_gate_setup({ npmToken: "npm_...", githubToken: "ghp_..." , npmUser: "you" })
+```
+
+值进的是宿主自己的凭据库（`ctx.credentials`，就是「模型」页存 key 的那个），**不是这个插件的文件**。之后每次发布它自己读，你不用再给。返回值只有 `{npmToken: true, githubToken: true}` 这种布尔，token 本身永远不回显。
+
+**先看自己在哪一步：**
+
+```
+publish_gate_status({ dir: "E:/my-plugin" })
+```
+
+```
+@you/cool-plugin@0.3.0
+entry: lib/index.js
+repository: you/cool-plugin
+market gate: opens 2026-11-11T09:12:00.000Z (about 3h)
+npm: not published yet (latest 0.2.9)
+tokens: npm ok, github ok
+```
+
+**然后跑链子：**
+
+```
+publish_gate_ship({ dir: "E:/my-plugin", steps: ["check", "git", "repo", "push"] })
+publish_gate_ship({ dir: "E:/my-plugin", steps: ["npm", "market"], confirm: true, category: "tools", en: "...", zh: "..." })
+```
+
+默认只跑前四步（不改外部世界）。`confirm: true` 才允许 `npm publish` 和市场 PR。哪一步失败就停在那一页，把真实原因抄给你；修完重跑会接着往下走。
+
+**最早什么时候能进市场？** 市场那边有一道硬门：**仓库必须建满一天**。所以 `publish_gate_ship` 的返回里带 `eta`：
+
+```json
+{ "known": true, "ready": false, "earliestAt": "2026-11-11T09:12:00.000Z", "waitMs": 10800000 }
+```
+
+仓库刚建好时它会直接告诉你「最早 X 点（约 N 小时）」，并提供一句话解释：在那之前提交 PR 也会被门禁挡下，满一天后自动重跑。仓库已经够老时它说「门禁已开，等维护者合并」。
+
+> 它不会替你编 PR 描述、不会替你选分类、不会在你没点头的时候按发布。这些是判断，不是机械活。
+
 ## 📮 提建议 / 报问题 / 说它判错了
 
 **这个插件最想要的反馈是「你判错了」。** 它全部的价值就是一句绿色的结论可信；任何一条规则把好包判成坏包、或者放过一个坏包，都比缺十个功能严重。
@@ -71,6 +117,9 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_update` | **装之前先回答该不该装**。市场里的更新插件都是装完起不来才回滚；这个先把 registry 上那个版本真的下载下来、解包到临时目录，跑同一套产物层与运行时层：入口能不能 import、`apply()` 能不能注册、tarball 里有没有代码、参数传错会不会抛。只在 checkout 里才有意义的规则（git / 市场 / 测试 / 链接）会被过滤掉，结论只关于代码。传 `dir` 或 `name` 都行（只给包名时从已装副本读当前版本） |
 | `publish_gate_drift` | 把「现在这个包」和「线上那个包」逐文件比：多了什么、少了什么、哪些文件内容变了（按 sha256 比，不看大小——重建就是从这里看出来的）。回答的是「这次发出去到底会改变什么」，不是「能不能发」 |
 | `publish_gate_release` | 发布前那两件手工活：改版本号、在 CHANGELOG 顶部开一节。默认只告诉你它要改什么，`apply: true` 才写；保留 CRLF，不会写出三段空行，不会重复开同一节 |
+| `publish_gate_setup` | 收一次密钥，之后不用再给：token 存进宿主自己的凭据库（和「模型」页同一个库），只回报「配好了没有」，绝不把值回显 |
+| `publish_gate_status` | 一条链上我现在在哪：入口文件、仓库建没建、市场门禁开了没、npm 上有没有这个版本 |
+| `publish_gate_ship` | 按顺序跑整条链：门禁 → 提交 → 建仓库 → 推代码 → npm 发布 → 市场条目 + PR。哪步失败停在哪步，重跑能接着走；`confirm: true` 才做不可逆的两步，并告诉你**最早什么时候能进市场** |
 | `publish_gate_fix` | 只做「规则只有一个正确答案」的那两类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）。**默认 dry-run**，只说改哪几处、为什么；`apply: true` 才写回 `package.json`。代码、版本、依赖一律不碰 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
@@ -341,7 +390,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 166 个单测
+node --test                      # 177 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 

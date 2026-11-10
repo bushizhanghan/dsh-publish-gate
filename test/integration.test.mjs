@@ -44,7 +44,10 @@ try {
     'publish_gate_drift',
     'publish_gate_release',
     'publish_gate_fix',
-    'publish_gate_link',
+    'publish_gate_setup',
+  'publish_gate_status',
+  'publish_gate_ship',
+  'publish_gate_link',
   ]
   results.push([`${expected.length} tools registered`, registry.size === expected.length && expected.every((n) => registry.has(n))])
 
