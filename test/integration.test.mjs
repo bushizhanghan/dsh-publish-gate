@@ -28,6 +28,35 @@ const results = []
 try {
   apply(fakeCtx, { networkTimeoutMs: 8000 })
 
+{
+  // Two surfaces, both tested by the wording that has to be present: people do
+  // not say "publish_gate", they say 能不能发 / 帮我发版. If those words live only
+  // in the README, the model has nothing to match against.
+  const want = {
+    publish_gate: /能不能发/,
+    publish_gate_ship: /帮我发版/,
+    publish_gate_verify: /发没发出去/,
+    publish_gate_update: /升级前先看看/,
+    publish_gate_fix: /帮我修一下/,
+    publish_gate_status: /市场进去了吗/,
+  }
+  for (const [name, re] of Object.entries(want)) {
+    const desc = registry.get(name)?.description || ""
+    results.push(["the description of " + name + " carries the phrasing a user would use", re.test(desc), desc.slice(0, 80)])
+  }
+  const seen = []
+  apply(
+    { tools: { register: () => {} }, get: (n) => (n === "skills" ? { register: (skill) => seen.push(skill) } : undefined) },
+    { networkTimeoutMs: 1000 },
+  )
+  const skill = seen[0] || {}
+  results.push(
+    ["a publish-gate skill is registered for the same phrasings",
+      seen.length === 1 && skill.name === "publish-gate" && /能不能发/.test(skill.description || "") && /发版/.test(skill.description || "") && /publish_gate_ship/.test(skill.content || ""),
+      JSON.stringify({ n: seen.length, name: skill.name || null })],
+  )
+}
+
 // These three used to accept nonsense and answer as if they had understood it:
 // bump: 123 became "patch", owner: 123 became a URL path, and a number for a
 // token was dropped while the reply still said ok.
