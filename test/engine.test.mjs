@@ -27,6 +27,10 @@ import {
   checkNodeVersion,
   checkPack,
   checkPackageJson,
+  planFixes,
+  applyFixes,
+  ruleInventory,
+  wrapSelfMounts,
   checkPatchYml,
   checkPublishedMatches,
   checkPublishIdentity,
@@ -2767,4 +2771,100 @@ test('an unauthenticated GitHub call is labelled as a rate limit, not as a missi
   assert.match(ghFailure(res(403, '0', '1900000000')), /5000\/h/)
   assert.equal(ghFailure(res(404, null, null)), 'HTTP 404')
   assert.equal(ghFailure(res(403, '12', null)), 'HTTP 403')
+})
+
+test('a top-level self mount is moved under insert, and a patch row is left alone', () => {
+  const base = {
+    name: '@me/demo',
+    version: '1.0.0',
+    type: 'module',
+    main: 'lib/index.js',
+    exports: { '.': './lib/index.js' },
+    files: ['lib', 'cordis.patch.yml'],
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }
+  const build = (patch) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pg-mount-'))
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(base, null, 2) + '\n')
+    mkdirSync(join(dir, 'lib'), { recursive: true })
+    writeFileSync(join(dir, 'lib', 'index.js'), 'export const name = "demo"\r\nexport function apply() {}\r\n')
+    writeFileSync(join(dir, 'cordis.patch.yml'), patch)
+    return dir
+  }
+
+  // The shape that cost two weeks: a row that names this package, at column 0.
+  const self = build('- id: demo\r\n  name: "@me/demo"\r\n')
+  assert.deepEqual(checkPatchYml(self).map((f) => f.rule), ['no-insert-row'])
+  const plan = planFixes(self)
+  const change = plan.changes.find((c) => c.kind === 'patch-insert')
+  assert.ok(change, 'the fix is planned')
+  assert.equal(change.rows, 1)
+  assert.equal(applyFixes(self, { dryRun: true }).applied, false)
+  assert.match(readFileSync(join(self, 'cordis.patch.yml'), 'utf8'), /^- id: demo/)
+  assert.equal(applyFixes(self, { dryRun: false }).applied, true)
+  const after = readFileSync(join(self, 'cordis.patch.yml'), 'utf8')
+  assert.equal(after, '- insert:\r\n    - id: demo\r\n      name: "@me/demo"\r\n')
+  assert.deepEqual(checkPatchYml(self).map((f) => f.rule), [])
+  rmSync(self, { recursive: true, force: true })
+
+  // A row that patches an entry someone else provides is a real patch: wrapping
+  // it under insert would add a duplicate of an entry that already exists.
+  const other = build('- id: llm-deepseek\n  config:\n    model: x\n')
+  assert.equal(planFixes(other).changes.some((c) => c.kind === 'patch-insert'), false)
+  applyFixes(other, { dryRun: false })
+  assert.equal(readFileSync(join(other, 'cordis.patch.yml'), 'utf8'), '- id: llm-deepseek\n  config:\n    model: x\n')
+  rmSync(other, { recursive: true, force: true })
+
+  // Two rows for the same package share one insert block.
+  const twice = build('- id: demo\n  name: "@me/demo"\n- id: demo-extra\n  name: "@me/demo/panel"\n')
+  assert.equal(wrapSelfMounts(readFileSync(join(twice, 'cordis.patch.yml'), 'utf8'), '@me/demo').wrapped, 2)
+  applyFixes(twice, { dryRun: false })
+  const two = readFileSync(join(twice, 'cordis.patch.yml'), 'utf8')
+  assert.equal((two.match(/- insert:/g) || []).length, 1, 'one insert block, not two')
+  assert.match(two, /- insert:\n {4}- id: demo\n {6}name: "@me\/demo"\n {4}- id: demo-extra/)
+  rmSync(twice, { recursive: true, force: true })
+})
+
+test('a host service belongs in peerDependencies, not dependencies', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pg-hostdep-'))
+  const write = (extra) =>
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({
+      name: '@me/demo',
+      version: '1.0.0',
+      type: 'module',
+      main: 'lib/index.js',
+      exports: { '.': './lib/index.js' },
+      files: ['lib'],
+      ...extra,
+    }, null, 2) + '\n')
+  const rule = () => checkPackageJson(dir).filter((f) => f.rule === 'host-service-in-dependencies')
+
+  write({ dependencies: { '@deepseek-ai/dsh-atomic-write': '^0.1.7' } })
+  assert.equal(rule().length, 1)
+  assert.equal(rule()[0].severity, 'error')
+  assert.match(rule()[0].title, /@deepseek-ai\/dsh-atomic-write/)
+
+  write({ peerDependencies: { '@deepseek-ai/dsh-atomic-write': '^0.1.7' }, peerDependenciesMeta: { '@deepseek-ai/dsh-atomic-write': { optional: true } } })
+  assert.deepEqual(rule(), [])
+
+  // A plain library from the same publisher is a normal dependency.
+  write({ dependencies: { '@deepseek-ai/schemastery': '^3.18.4' } })
+  assert.deepEqual(rule(), [])
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('the rule inventory lists what the gate can emit, with real severities', () => {
+  const inv = ruleInventory()
+  assert.ok(inv.total > 100, 'the gate has more than a hundred rules')
+  assert.ok(inv.counts.error > 0 && inv.counts.warn > 0)
+  const by = Object.fromEntries(inv.rules.map((r) => [r.rule, r.severity]))
+  assert.equal(by['no-insert-row'], 'error')
+  assert.equal(by['tool-missing-execute'], 'error')
+  assert.equal(by['lib-console-log'], 'warn')
+  assert.equal(by['no-changelog'], 'info')
+  assert.equal(by['host-service-in-dependencies'], 'error')
+  // A rule whose code was deleted stayed in RULE_ORDER for months and read like
+  // coverage. The inventory is built from the source, so it cannot do that again.
+  assert.equal(by['hand-edited-build'], undefined)
+  assert.ok(inv.dynamic.includes('inject-missing-tools'), 'rule names built at the call site are declared')
 })

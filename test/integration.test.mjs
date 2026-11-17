@@ -96,6 +96,7 @@ try {
     'publish_gate_drift',
     'publish_gate_release',
     'publish_gate_fix',
+    'publish_gate_rules',
     'publish_gate_setup',
   'publish_gate_status',
   'publish_gate_ship',

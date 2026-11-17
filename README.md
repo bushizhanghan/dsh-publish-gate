@@ -132,7 +132,7 @@ npm 不需要你交 token：`npm publish` 读的是 `~/.npmrc`，所以只要那
 
 说你踩过的坑，会被做成 `test/corpus.test.mjs` 里的一个固定用例（现在那六个用例就是 `@liustack/modlens`、`@michengai/dsh-codex-ui`、`@tt-a1i/archify-dsh` 这些真实包装出来的）——**同一条误报不会犯第二次**，这是这个插件唯一真正的进步方式。
 
-**先说清楚不做的**（免得你提了我只能拒）：不自动改你的代码、不自动 bump 版本、不自动发 npm、不假装能在 CI 里跑完整门禁。`publish_gate_fix` 例外——它只做「这条规则只有一个正确答案」的那两类清单修复，而且默认 dry-run，见下面的设计取舍。
+**先说清楚不做的**（免得你提了我只能拒）：不自动改你的代码、不自动 bump 版本、不自动发 npm、不假装能在 CI 里跑完整门禁。`publish_gate_fix` 例外——它只做「这条规则只有一个正确答案」的那三类机械修复（`package.json` 两处 + 挂载行的缩进），而且默认 dry-run，见下面的设计取舍。
 
 ## 典型用法（写完插件后）
 
@@ -149,7 +149,7 @@ npm 不需要你交 token：`npm publish` 读的是 `~/.npmrc`，所以只要那
 ```sh
 dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 ```
-重启 DSH 后生效。**只读**：除 `publish_gate_fix` 在你显式传 `apply: true` 时改 `package.json` 里那两类机械修复之外，这个插件从不写你的插件目录——不碰 `lib/`、不碰版本、不碰依赖。
+重启 DSH 后生效。**只读**：除 `publish_gate_fix` 在你显式传 `apply: true` 时改 `package.json` 里的两处和 `cordis.patch.yml` 的挂载缩进之外，这个插件从不写你的插件目录——不碰 `lib/`、不碰版本、不碰依赖。
 
 ## Agent 工具
 
@@ -172,7 +172,8 @@ dsh plugin --profile desktop add @bushizhanghan/dsh-publish-gate
 | `publish_gate_setup` | 收一次密钥，之后不用再给：token 存进宿主自己的凭据库（和「模型」页同一个库），只回报「配好了没有」，绝不把值回显 |
 | `publish_gate_status` | 一条链上我现在在哪：入口文件、仓库建没建、市场门禁开了没、npm 上有没有这个版本 |
 | `publish_gate_ship` | 按顺序跑整条链：门禁 → 提交 → 建仓库 → 推代码 → npm 发布 → 核对线上字节 → 市场条目 + PR。哪步失败停在哪步，重跑能接着走；`confirm: true` 才做不可逆的动作，并告诉你**最早什么时候能进市场** |
-| `publish_gate_fix` | 只做「规则只有一个正确答案」的那两类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）。**默认 dry-run**，只说改哪几处、为什么；`apply: true` 才写回 `package.json`。代码、版本、依赖一律不碰 |
+| `publish_gate_rules` | 规则目录：这个门禁能报出的每一条规则、按报告顺序、带上它真实的 severity（从源码里读出来，所以不会和检查逻辑走散）。传 `dir` 还能看到这个插件触发了哪几条、没触发哪几条——用来回答「这条 finding 到底拦不拦发布」。它同时也会暴露"代码已删、名字还留在清单里"的死规则（加这个工具时就当场抓到一条） |
+| `publish_gate_fix` | 只做「规则只有一个正确答案」的那三类机械修复：scoped 包缺 `publishConfig.access: "public"`（npm 会按私有发，报错既不说 scope 也不说这个字段）、`files` 里少了入口目录或挂载 patch（于是发出去一个装得上但永不加载的包）、`cordis.patch.yml` 里那行名字是本包、却写在顶层的 `- id:`（顶层行是"改已有条目"，不是"挂载本包"——这条错误让两个插件静默不加载了两个星期）。**默认 dry-run**；`apply: true` 才写回。代码、版本、依赖一律不碰 |
 | `publish_gate_commands` | 按顺序列出发布命令，并标出这台机器已经走到哪一步。命令是**这台机器上真能跑的形式**：Windows 下 `npm publish` 走 `cmd /c`（PowerShell 的 `npm.ps1` 常被执行策略拦掉），`npm publish` 后面紧跟一条 `publish_gate_verify`；版本是预发版时命令自带 `--tag next`；最后一步是给发出去的 commit 打 tag |
 
 ## 检查清单
@@ -442,7 +443,7 @@ publish_gate_update({ name: "@liustack/modlens" })
 ## 开发
 
 ```sh
-node --test                      # 196 个单测
+node --test                      # 199 个单测
 node test/integration.test.mjs   # 32 条集成断言（9 个真实插件作 fixture）
 ```
 
